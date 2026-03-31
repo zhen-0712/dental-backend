@@ -1,2 +1,14 @@
-weight/*.pt
-__pycache__
+weight/
+plaque_output/
+api_tasks/
+real_teeth/
+real_teeth_processed/
+real_teeth_analysis/
+personalized_3d_models_real/
+__pycache__/
+*.pyc
+.vscode/
+*.log
+teeth_color_test/
+color_test/
+api_tasks/

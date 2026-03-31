@@ -1,0 +1,8 @@
+LICENSE
+README.md
+pyproject.toml
+segmentanytooth.egg-info/PKG-INFO
+segmentanytooth.egg-info/SOURCES.txt
+segmentanytooth.egg-info/dependency_links.txt
+segmentanytooth.egg-info/requires.txt
+segmentanytooth.egg-info/top_level.txt

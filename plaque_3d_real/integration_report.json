@@ -1,0 +1,21 @@
+{
+  "version": "real_photos_fixed",
+  "source_model": "personalized_3d_models_real/custom_real_teeth.obj",
+  "plaque_report": "plaque_detection_real/plaque_detection_report.json",
+  "summary": {
+    "affected_teeth": 0,
+    "marked_teeth": 0,
+    "marked_vertices": 0,
+    "total_vertices": 298367,
+    "red_percentage": 0.0
+  },
+  "color_distribution": {
+    "red_vertices": 0,
+    "white_vertices": 298367
+  },
+  "output_files": {
+    "ply": "plaque_3d_real/plaque_real.ply",
+    "glb": "plaque_3d_real/plaque_real.glb",
+    "obj": "plaque_3d_real/plaque_real.obj"
+  }
+}
