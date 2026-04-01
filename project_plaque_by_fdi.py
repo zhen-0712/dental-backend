@@ -417,20 +417,34 @@ all_colors_u8 = (np.concatenate([upper_colors, lower_colors], axis=0) * 255).ast
 # ==================== 輸出 ====================
 print(f"\n💾 輸出...")
 
-if MODEL_PATH.exists():
-    base_mesh = trimesh.load(str(MODEL_PATH))
-    if len(base_mesh.vertices) == n_total:
-        out_verts = np.array(base_mesh.vertices)
-        out_faces = np.array(base_mesh.faces)
-    else:
-        print(f"  ⚠️  合併模型頂點數 {len(base_mesh.vertices)} != {n_total}，直接合併")
-        combined = trimesh.util.concatenate([upper_mesh, lower_mesh])
-        out_verts = np.array(combined.vertices)
-        out_faces = np.array(combined.faces)
-else:
-    combined = trimesh.util.concatenate([upper_mesh, lower_mesh])
-    out_verts = np.array(combined.vertices)
-    out_faces = np.array(combined.faces)
+# 從 analysis JSON 取得缺牙清單
+_analysis_path = BASE / "real_teeth_analysis" / "real_teeth_analysis.json"
+_never_detected = []
+if _analysis_path.exists():
+    import json as _json
+    _never_detected = _json.loads(_analysis_path.read_text()).get("never_detected", [])
+    print(f"  缺牙移除: {_never_detected}")
+
+# combined + labels（含缺牙完整版）
+combined_raw = trimesh.util.concatenate([upper_mesh, lower_mesh])
+combined_labels = np.concatenate([upper_labels, lower_labels])
+
+# 找出要保留的頂點（移除缺牙）
+keep_mask = np.ones(len(combined_raw.vertices), dtype=bool)
+for _t in _never_detected:
+    keep_mask[combined_labels == _t] = False
+
+keep_indices = np.where(keep_mask)[0]
+index_map = np.full(len(combined_raw.vertices), -1, dtype=np.int64)
+index_map[keep_indices] = np.arange(len(keep_indices))
+
+# 過濾頂點、顏色、面
+out_verts = np.array(combined_raw.vertices)[keep_indices]
+all_colors_u8 = all_colors_u8[keep_indices]
+_old_faces = np.array(combined_raw.faces)
+_face_keep = keep_mask[_old_faces].all(axis=1)
+out_faces = index_map[_old_faces[_face_keep]]
+print(f"  移除缺牙後: {len(out_verts):,} 頂點  {len(out_faces):,} 面")
 
 def export_mesh(path, verts, faces, colors):
     trimesh.Trimesh(vertices=verts, faces=faces,
