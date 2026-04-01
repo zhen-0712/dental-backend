@@ -1191,3 +1191,8 @@ assert len(scaled_upper_custom.vertices) == len(upper_seg_labels), \
 assert len(scaled_lower_custom.vertices) == len(lower_seg_labels), \
     f"下顎頂點數 {len(scaled_lower_custom.vertices)} != seg_labels {len(lower_seg_labels)}"
 print(f"  ✅ 頂點數量與 seg_labels 一致驗證通過")
+
+# 同時輸出 GLB 供網頁展示
+glb_path = OUTPUT_DIR / "custom_real_teeth.glb"
+full_mesh.export(str(glb_path))
+print(f"  ✓ GLB 網頁展示版: {glb_path.name}")
