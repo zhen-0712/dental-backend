@@ -12,12 +12,15 @@ import json
 
 # ==================== 設定 ====================
 
-BASE_DIR = Path("/home/Zhen/projects/SegmentAnyTooth")
+import sys; sys.path.insert(0, "/home/Zhen/projects/SegmentAnyTooth")
+from user_env import get_paths, setup_user_dirs
+_PATHS = get_paths()
+setup_user_dirs(_PATHS["user_dir"])
+BASE_DIR = _PATHS["user_dir"]
 REAL_TEETH_DIR = BASE_DIR / "real_teeth_processed"
 
 WEIGHT_DIR = Path("/home/Zhen/projects/SegmentAnyTooth/weight")
-OUTPUT_DIR = Path("./real_teeth_analysis")
-OUTPUT_DIR.mkdir(exist_ok=True)
+OUTPUT_DIR = _PATHS["analysis"]
 
 VIEW_MAPPING = {
     'front.jpg': 'front',

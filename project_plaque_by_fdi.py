@@ -21,12 +21,15 @@ import json
 from pathlib import Path
 
 # ==================== 路徑設定 ====================
-BASE         = Path("/home/Zhen/projects/SegmentAnyTooth")
-ROI_MASK_DIR = BASE / "plaque_output"
-MODEL_DIR    = BASE / "personalized_3d_models_real"
-OUTPUT_DIR   = BASE / "plaque_output"
-WEIGHT_DIR   = BASE / "weight"
-OUTPUT_DIR.mkdir(exist_ok=True)
+import sys; sys.path.insert(0, "/home/Zhen/projects/SegmentAnyTooth")
+from user_env import get_paths, setup_user_dirs, BASE as _SAT_BASE
+_PATHS = get_paths()
+setup_user_dirs(_PATHS["user_dir"])
+BASE         = _PATHS["user_dir"]
+ROI_MASK_DIR = _PATHS["plaque_output"]
+MODEL_DIR    = _PATHS["model_dir"]
+OUTPUT_DIR   = _PATHS["plaque_output"]
+WEIGHT_DIR   = _SAT_BASE / "weight"
 
 UPPER_OBJ    = MODEL_DIR / "custom_upper_only.obj"
 LOWER_OBJ    = MODEL_DIR / "custom_lower_only.obj"
@@ -418,7 +421,7 @@ all_colors_u8 = (np.concatenate([upper_colors, lower_colors], axis=0) * 255).ast
 print(f"\n💾 輸出...")
 
 # 從 analysis JSON 取得缺牙清單
-_analysis_path = BASE / "real_teeth_analysis" / "real_teeth_analysis.json"
+_analysis_path = _PATHS["analysis"] / "real_teeth_analysis.json"
 _never_detected = []
 if _analysis_path.exists():
     import json as _json

@@ -30,7 +30,7 @@ class User(Base):
     email         = Column(String(255), unique=True, index=True, nullable=False)
     name          = Column(String(100), nullable=False)
     password_hash = Column(String(255), nullable=False)
-    created_at    = Column(DateTime, default=datetime.utcnow)
+    created_at    = Column(DateTime, default=lambda: __import__("datetime").datetime.now(__import__("datetime").timezone(__import__("datetime").timedelta(hours=8))).replace(tzinfo=None))
     analyses      = relationship("Analysis", back_populates="user", cascade="all, delete-orphan")
 
 class Analysis(Base):
@@ -39,7 +39,7 @@ class Analysis(Base):
     user_id        = Column(Integer, ForeignKey("users.id"), nullable=False)
     type           = Column(Enum(AnalysisType), nullable=False)
     status         = Column(Enum(AnalysisStatus), default=AnalysisStatus.queued)
-    created_at     = Column(DateTime, default=datetime.utcnow)
+    created_at     = Column(DateTime, default=lambda: __import__("datetime").datetime.now(__import__("datetime").timezone(__import__("datetime").timedelta(hours=8))).replace(tzinfo=None))
     completed_at   = Column(DateTime, nullable=True)
     data_dir       = Column(String(512), nullable=True)   # 該次分析的資料夾
     result_json    = Column(Text, nullable=True)           # 結果 JSON 字串

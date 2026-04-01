@@ -7,11 +7,13 @@
 
 import cv2
 import numpy as np
-from pathlib import Path
 
-INPUT_DIR  = Path("/home/Zhen/projects/SegmentAnyTooth/real_teeth")
-OUTPUT_DIR = Path("/home/Zhen/projects/SegmentAnyTooth/real_teeth_processed")
-OUTPUT_DIR.mkdir(exist_ok=True)
+import sys; sys.path.insert(0, "/home/Zhen/projects/SegmentAnyTooth")
+from user_env import get_paths, setup_user_dirs, get_user_dir
+_PATHS = get_paths()
+setup_user_dirs(_PATHS["user_dir"])
+INPUT_DIR  = _PATHS["real_teeth"]
+OUTPUT_DIR = _PATHS["real_teeth_proc"]
 
 # ==================== 視角設定 ====================
 # light_type 根據你的照片來源調整：

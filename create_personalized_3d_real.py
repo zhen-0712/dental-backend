@@ -14,10 +14,13 @@ from extract_control_points import get_tooth_control_points_3d
 
 # ==================== 配置 ====================
 
-ANALYSIS_DIR = Path("./real_teeth_analysis")
-MODELS_DIR = Path("./models")
-OUTPUT_DIR = Path("./personalized_3d_models_real")
-OUTPUT_DIR.mkdir(exist_ok=True)
+import sys; sys.path.insert(0, "/home/Zhen/projects/SegmentAnyTooth")
+from user_env import get_paths, setup_user_dirs
+_PATHS = get_paths()
+setup_user_dirs(_PATHS["user_dir"])
+ANALYSIS_DIR = _PATHS["analysis"]
+MODELS_DIR   = _PATHS["models"]
+OUTPUT_DIR   = _PATHS["model_dir"]
 
 # ⭐⭐⭐ 客製化策略
 ENABLE_RATIO_ADJUSTMENT = True

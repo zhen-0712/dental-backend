@@ -29,7 +29,11 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 import uvicorn, uuid, shutil, subprocess, json
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+TZ_TAIPEI = timezone(timedelta(hours=8))
+def now_taipei(): return datetime.now(TZ_TAIPEI).replace(tzinfo=None), timezone, timedelta
+TZ_TAIPEI = timezone(timedelta(hours=8))
+def now_taipei(): return datetime.now(TZ_TAIPEI).replace(tzinfo=None)
 
 from database import get_db, init_db, Analysis, AnalysisType, AnalysisStatus, User
 from auth import (create_token, decode_token, authenticate_user,
@@ -122,15 +126,19 @@ def me(user: User = Depends(get_current_user)):
 # ==================== 工具函式 ====================
 
 def user_data_dir(user_id: int) -> Path:
+    """取得並初始化使用者資料夾"""
     d = DATA_DIR / str(user_id)
-    d.mkdir(parents=True, exist_ok=True)
+    # 建立所有子目錄
+    for sub in ["real_teeth", "real_teeth_processed", "real_teeth_analysis",
+                "personalized_3d_models_real", "teeth_color_test", "plaque_output"]:
+        (d / sub).mkdir(parents=True, exist_ok=True)
     return d
 
-def run_script(script_name: str, env_overrides: dict = None) -> tuple[bool, str]:
+def run_script(script_name: str, user_dir: Path = None) -> tuple[bool, str]:
     import os
     env = os.environ.copy()
-    if env_overrides:
-        env.update(env_overrides)
+    if user_dir:
+        env["DENTAL_USER_DIR"] = str(user_dir)
     result = subprocess.run(
         [PYTHON, str(BASE / script_name)],
         capture_output=True, text=True,
@@ -140,16 +148,16 @@ def run_script(script_name: str, env_overrides: dict = None) -> tuple[bool, str]
         return False, result.stderr[-2000:]
     return True, ""
 
-def save_uploads(uploads: dict, dest_dir: Path):
-    VIEW_FILENAMES = {
-        "front":          "front2_test.jpg",
-        "left_side":      "left_side2_test.jpg",
-        "right_side":     "right_side2_test.jpg",
-        "upper_occlusal": "upper_occlusal2_test.jpg",
-        "lower_occlusal": "lower_occlusal2_test.jpg",
-    }
-    real_teeth_dir = BASE / "real_teeth"
-    real_teeth_dir.mkdir(exist_ok=True)
+VIEW_FILENAMES = {
+    "front":          "front.jpg",
+    "left_side":      "left_side.jpg",
+    "right_side":     "right_side.jpg",
+    "upper_occlusal": "upper_occlusal.jpg",
+    "lower_occlusal": "lower_occlusal.jpg",
+}
+
+def save_uploads(uploads: dict, real_teeth_dir: Path):
+    real_teeth_dir.mkdir(parents=True, exist_ok=True)
     for view, upload in uploads.items():
         dest = real_teeth_dir / VIEW_FILENAMES[view]
         upload.file.seek(0)
@@ -161,27 +169,29 @@ def save_uploads(uploads: dict, dest_dir: Path):
 def run_init_pipeline(task_id: str, analysis_id: int, user_id: int):
     db = next(get_db())
     analysis = db.query(Analysis).filter(Analysis.id == analysis_id).first() if analysis_id else None
+    udir = user_data_dir(user_id) if user_id else BASE
     try:
         if analysis:
             analysis.status = AnalysisStatus.running
             db.commit()
 
         tasks[task_id]["step"] = "preprocessing"
-        ok, err = run_script("preprocess_photos.py")
+        ok, err = run_script("preprocess_photos.py", udir)
         if not ok: raise Exception(f"preprocess failed:\n{err}")
 
         tasks[task_id]["step"] = "analyzing"
-        ok, err = run_script("analyze_real_teeth.py")
+        ok, err = run_script("analyze_real_teeth.py", udir)
         if not ok: raise Exception(f"analyze failed:\n{err}")
 
         tasks[task_id]["step"] = "creating_3d"
-        ok, err = run_script("create_personalized_3d_real.py")
+        ok, err = run_script("create_personalized_3d_real.py", udir)
         if not ok: raise Exception(f"create_3d failed:\n{err}")
 
-        model_ready = (MODEL_DIR / "custom_upper_only.obj").exists()
+        umodel_dir = udir / "personalized_3d_models_real"
+        model_ready = umodel_dir.exists() and (umodel_dir / "custom_upper_only.obj").exists()
         # 讀取牙齒分析 JSON 存入 result
         tooth_json = {}
-        tooth_path = BASE / "real_teeth_analysis" / "real_teeth_analysis.json"
+        tooth_path = udir / "real_teeth_analysis" / "real_teeth_analysis.json"
         if tooth_path.exists():
             with open(tooth_path) as f:
                 tooth_json = json.load(f)
@@ -193,7 +203,7 @@ def run_init_pipeline(task_id: str, analysis_id: int, user_id: int):
 
         if analysis:
             analysis.status       = AnalysisStatus.done
-            analysis.completed_at = datetime.utcnow()
+            analysis.completed_at = now_taipei()
             analysis.result_json  = json.dumps(result)
             db.commit()
 
@@ -213,6 +223,7 @@ def run_init_pipeline(task_id: str, analysis_id: int, user_id: int):
 def run_plaque_pipeline(task_id: str, analysis_id: int, user_id: int):
     db = next(get_db())
     analysis = db.query(Analysis).filter(Analysis.id == analysis_id).first() if analysis_id else None
+    udir = user_data_dir(user_id) if user_id else BASE
     try:
         if analysis:
             analysis.status = AnalysisStatus.running
@@ -222,19 +233,19 @@ def run_plaque_pipeline(task_id: str, analysis_id: int, user_id: int):
             raise Exception("尚未初始化，請先執行初始化流程")
 
         tasks[task_id]["step"] = "detecting_plaque"
-        ok, err = run_script("color_test/teeth_test.py")
+        ok, err = run_script("color_test/teeth_test.py", udir)
         if not ok: raise Exception(f"teeth_test failed:\n{err}")
 
         tasks[task_id]["step"] = "extracting_regions"
-        ok, err = run_script("extract_plaque_regions.py")
+        ok, err = run_script("extract_plaque_regions.py", udir)
         if not ok: raise Exception(f"extract_plaque failed:\n{err}")
 
         tasks[task_id]["step"] = "projecting_plaque"
-        ok, err = run_script("project_plaque_by_fdi.py")
+        ok, err = run_script("project_plaque_by_fdi.py", udir)
         if not ok: raise Exception(f"project_plaque failed:\n{err}")
 
         stats = {}
-        stats_path = BASE / "plaque_output" / "plaque_by_fdi_stats.json"
+        stats_path = udir / "plaque_output" / "plaque_by_fdi_stats.json"
         if stats_path.exists():
             with open(stats_path) as f:
                 stats = json.load(f)
@@ -247,7 +258,7 @@ def run_plaque_pipeline(task_id: str, analysis_id: int, user_id: int):
 
         if analysis:
             analysis.status       = AnalysisStatus.done
-            analysis.completed_at = datetime.utcnow()
+            analysis.completed_at = now_taipei()
             analysis.result_json  = json.dumps(result, ensure_ascii=False)
             db.commit()
 
@@ -275,9 +286,10 @@ async def init_model(
     user: User | None = Depends(get_current_user_optional),
     db:   Session     = Depends(get_db),
 ):
+    _udir = user_data_dir(user.id) if user else BASE
     save_uploads({"front": front, "left_side": left_side, "right_side": right_side,
                   "upper_occlusal": upper_occlusal, "lower_occlusal": lower_occlusal},
-                 BASE / "real_teeth")
+                 _udir / "real_teeth")
 
     task_id = str(uuid.uuid4())[:8]
     analysis_id = None
@@ -289,9 +301,10 @@ async def init_model(
         db.refresh(analysis)
         analysis_id = analysis.id
 
+    _uid = user.id if user else None
     tasks[task_id] = {"status": "queued", "step": "waiting", "type": "init",
                       "analysis_id": analysis_id}
-    background_tasks.add_task(run_init_pipeline, task_id, analysis_id, user.id if user else None)
+    background_tasks.add_task(run_init_pipeline, task_id, analysis_id, _uid)
     return {"task_id": task_id, "status": "queued", "type": "init"}
 
 @app.post("/plaque")
@@ -305,9 +318,10 @@ async def analyze_plaque(
     user: User | None = Depends(get_current_user_optional),
     db:   Session     = Depends(get_db),
 ):
+    _udir = user_data_dir(user.id) if user else BASE
     save_uploads({"front": front, "left_side": left_side, "right_side": right_side,
                   "upper_occlusal": upper_occlusal, "lower_occlusal": lower_occlusal},
-                 BASE / "real_teeth")
+                 _udir / "real_teeth")
 
     task_id = str(uuid.uuid4())[:8]
     analysis_id = None
@@ -319,9 +333,10 @@ async def analyze_plaque(
         db.refresh(analysis)
         analysis_id = analysis.id
 
+    _uid = user.id if user else None
     tasks[task_id] = {"status": "queued", "step": "waiting", "type": "plaque",
                       "analysis_id": analysis_id}
-    background_tasks.add_task(run_plaque_pipeline, task_id, analysis_id, user.id if user else None)
+    background_tasks.add_task(run_plaque_pipeline, task_id, analysis_id, _uid)
     return {"task_id": task_id, "status": "queued", "type": "plaque"}
 
 @app.get("/analyses")
@@ -341,9 +356,13 @@ def get_analyses(user: User = Depends(get_current_user), db: Session = Depends(g
     ]
 
 @app.get("/model_status")
-def model_status():
-    ready = (MODEL_DIR / "custom_upper_only.obj").exists() and \
-            (MODEL_DIR / "custom_lower_only.obj").exists()
+def model_status(user: User | None = Depends(get_current_user_optional)):
+    if user:
+        udir = user_data_dir(user.id)
+        umodel_dir = udir / "personalized_3d_models_real"
+    else:
+        umodel_dir = MODEL_DIR
+    ready = (umodel_dir / "custom_upper_only.obj").exists() and             (umodel_dir / "custom_lower_only.obj").exists()
     return {"model_ready": ready}
 
 @app.get("/status/{task_id}")
@@ -362,12 +381,21 @@ def get_result(task_id: str):
     return t["result"]
 
 @app.get("/files/{filename}")
-def get_file(filename: str):
-    for search_dir in [
+def get_file(filename: str, user: User | None = Depends(get_current_user_optional)):
+    search_dirs = []
+    if user:
+        udir = user_data_dir(user.id)
+        search_dirs += [
+            udir / "plaque_output",
+            udir / "real_teeth_analysis",
+            udir / "personalized_3d_models_real",
+        ]
+    search_dirs += [
         BASE / "plaque_output",
         BASE / "real_teeth_analysis",
         BASE / "personalized_3d_models_real",
-    ]:
+    ]
+    for search_dir in search_dirs:
         path = search_dir / filename
         if path.exists():
             media_type = "model/gltf-binary" if filename.endswith(".glb") else None

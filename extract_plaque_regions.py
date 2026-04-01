@@ -19,46 +19,49 @@ import json
 from pathlib import Path
 
 # ==================== 路徑設定 ====================
-BASE       = Path("/home/Zhen/projects/SegmentAnyTooth")
-MASK_DIR   = BASE / "teeth_color_test"
-PHOTO_DIR  = BASE / "real_teeth"
-OUTPUT_DIR = BASE / "plaque_output"
-WEIGHT_DIR = BASE / "weight"
-OUTPUT_DIR.mkdir(exist_ok=True)
+import sys; sys.path.insert(0, "/home/Zhen/projects/SegmentAnyTooth")
+from user_env import get_paths, setup_user_dirs, BASE as _SAT_BASE
+_PATHS = get_paths()
+setup_user_dirs(_PATHS["user_dir"])
+BASE       = _PATHS["user_dir"]
+MASK_DIR   = _PATHS["teeth_color_test"]
+PHOTO_DIR  = _PATHS["real_teeth"]
+OUTPUT_DIR = _PATHS["plaque_output"]
+WEIGHT_DIR = _SAT_BASE / "weight"
 
 # ==================== 各視角設定 ====================
 VIEW_CONFIG = {
     'front': {
-        'mask_file':  'mask_front2_test.jpg',
-        'photo_file': 'front2_test.jpg',
+        'mask_file':  'mask_front.jpg',
+        'photo_file': 'front.jpg',
         'sat_view':   'front',
         'jaw_split_ratio': 0.50,
         'jaw_label': 'both',
     },
     'left_side': {
-        'mask_file':  'mask_left_side2_test.jpg',
-        'photo_file': 'left_side2_test.jpg',
+        'mask_file':  'mask_left_side.jpg',
+        'photo_file': 'left_side.jpg',
         'sat_view':   'left',
         'jaw_split_ratio': None,
         'jaw_label': 'both',
     },
     'right_side': {
-        'mask_file':  'mask_right_side2_test.jpg',
-        'photo_file': 'right_side2_test.jpg',
+        'mask_file':  'mask_right_side.jpg',
+        'photo_file': 'right_side.jpg',
         'sat_view':   'right',
         'jaw_split_ratio': None,
         'jaw_label': 'both',
     },
     'upper_occlusal': {
-        'mask_file':  'mask_upper_occlusal2_test.jpg',
-        'photo_file': 'upper_occlusal2_test.jpg',
+        'mask_file':  'mask_upper_occlusal.jpg',
+        'photo_file': 'upper_occlusal.jpg',
         'sat_view':   'upper',
         'jaw_split_ratio': None,
         'jaw_label': 'upper',
     },
     'lower_occlusal': {
-        'mask_file':  'mask_lower_occlusal2_test.jpg',
-        'photo_file': 'lower_occlusal2_test.jpg',
+        'mask_file':  'mask_lower_occlusal.jpg',
+        'photo_file': 'lower_occlusal.jpg',
         'sat_view':   'lower',
         'jaw_split_ratio': None,
         'jaw_label': 'lower',
