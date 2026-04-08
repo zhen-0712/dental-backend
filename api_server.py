@@ -31,8 +31,6 @@ import uvicorn, uuid, shutil, subprocess, json
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 TZ_TAIPEI = timezone(timedelta(hours=8))
-def now_taipei(): return datetime.now(TZ_TAIPEI).replace(tzinfo=None), timezone, timedelta
-TZ_TAIPEI = timezone(timedelta(hours=8))
 def now_taipei(): return datetime.now(TZ_TAIPEI).replace(tzinfo=None)
 
 from database import get_db, init_db, Analysis, AnalysisType, AnalysisStatus, User
@@ -189,7 +187,6 @@ def run_init_pipeline(task_id: str, analysis_id: int, user_id: int):
 
         umodel_dir = udir / "personalized_3d_models_real"
         model_ready = umodel_dir.exists() and (umodel_dir / "custom_upper_only.obj").exists()
-        # 讀取牙齒分析 JSON 存入 result
         tooth_json = {}
         tooth_path = udir / "real_teeth_analysis" / "real_teeth_analysis.json"
         if tooth_path.exists():
@@ -229,7 +226,8 @@ def run_plaque_pipeline(task_id: str, analysis_id: int, user_id: int):
             analysis.status = AnalysisStatus.running
             db.commit()
 
-        if not (MODEL_DIR / "custom_upper_only.obj").exists():
+        umodel_dir = udir / "personalized_3d_models_real"
+        if not (umodel_dir / "custom_upper_only.obj").exists():
             raise Exception("尚未初始化，請先執行初始化流程")
 
         tasks[task_id]["step"] = "detecting_plaque"
@@ -381,7 +379,12 @@ def get_result(task_id: str):
     return t["result"]
 
 @app.get("/files/{filename}")
-def get_file(filename: str, user: User | None = Depends(get_current_user_optional)):
+def get_file(filename: str, token: str = None, user: User | None = Depends(get_current_user_optional), db: Session = Depends(get_db)):
+    # Support token via query param (for model-viewer which can't set headers)
+    if token and not user:
+        payload = decode_token(token)
+        if payload:
+            user = get_user_by_id(db, int(payload["sub"]))
     search_dirs = []
     if user:
         udir = user_data_dir(user.id)
@@ -402,6 +405,20 @@ def get_file(filename: str, user: User | None = Depends(get_current_user_optiona
             return FileResponse(str(path), media_type=media_type,
                                 headers={"Access-Control-Allow-Origin": "*"})
     return JSONResponse(status_code=404, content={"error": "file not found"})
+
+@app.get("/favicon.ico")
+def favicon():
+    p = Path("/home/Zhen/projects/dental-web/favicon.ico")
+    if p.exists():
+        return FileResponse(str(p))
+    return JSONResponse(status_code=204, content={})
+
+@app.get("/favicon.svg")
+def favicon_svg():
+    p = Path("/home/Zhen/projects/dental-web/favicon.svg")
+    if p.exists():
+        return FileResponse(str(p), media_type="image/svg+xml")
+    return JSONResponse(status_code=204, content={})
 
 @app.get("/health")
 def health():
