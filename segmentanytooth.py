@@ -76,8 +76,11 @@ def predict(
 
     # Get YOLO output
     names = r.names if not should_flip else LEFT_CLASSES
-    boxes = r.boxes.xyxy.squeeze(0).cpu().numpy()
-    clss = r.boxes.cls.squeeze(0).cpu().numpy().astype(np.int32)
+    boxes = r.boxes.xyxy.cpu().numpy()
+    clss = r.boxes.cls.cpu().numpy().astype(np.int32)
+    # 確保至少是 1D（單一牙齒時 squeeze 會變 0-dimensional）
+    if boxes.ndim == 1: boxes = boxes[np.newaxis, :]
+    if clss.ndim == 0: clss = clss[np.newaxis]
 
     # Sort by class id to ensure consistent label ordering
     sort_ids = np.argsort(clss)

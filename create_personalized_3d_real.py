@@ -231,13 +231,12 @@ def build_tooth_face_groups(faces, vertex_labels):
 
 
 def remove_teeth_from_mesh(vertices, faces, vertex_labels, teeth_to_remove):
-    """★ 優化：np.isin 一次性找所有要刪除的 face，取代逐顆迴圈"""
+    """移除指定牙齒的 face，並重新 remap vertex index 移除孤立頂點"""
     if not teeth_to_remove:
         return vertices, faces
     faces = np.asarray(faces, dtype=np.int32)
     tooth_face_groups = build_tooth_face_groups(faces, vertex_labels)
 
-    # ★ 批次收集要刪除的 face indices
     remove_face_idx = np.concatenate(
         [tooth_face_groups[t] for t in teeth_to_remove if t in tooth_face_groups]
     ) if any(t in tooth_face_groups for t in teeth_to_remove) else np.array([], dtype=np.int64)
@@ -247,7 +246,15 @@ def remove_teeth_from_mesh(vertices, faces, vertex_labels, teeth_to_remove):
 
     mask_faces = np.ones(len(faces), dtype=bool)
     mask_faces[remove_face_idx] = False
-    return vertices, faces[mask_faces]
+    new_faces = faces[mask_faces]
+
+    # ★ 重新 remap：只保留有 face 參照到的頂點
+    used_verts = np.unique(new_faces)
+    remap = np.full(len(vertices), -1, dtype=np.int64)
+    remap[used_verts] = np.arange(len(used_verts))
+    new_vertices = vertices[used_verts]
+    new_faces_remapped = remap[new_faces]
+    return new_vertices, new_faces_remapped, used_verts
 
 
 def compute_customized_3d_scales(mesh, seg_labels, analysis_data, teeth_list):
@@ -715,9 +722,9 @@ print("\n🦷 生成客製化模型...")
 upper_to_remove = [t for t in never_detected if t < 30]
 lower_to_remove = [t for t in never_detected if t >= 30]
 
-upper_v, upper_f = remove_teeth_from_mesh(
+upper_v, upper_f, upper_used = remove_teeth_from_mesh(
     scaled_upper_custom.vertices, scaled_upper_custom.faces, upper_seg_labels, upper_to_remove)
-lower_v, lower_f = remove_teeth_from_mesh(
+lower_v, lower_f, lower_used = remove_teeth_from_mesh(
     scaled_lower_custom.vertices, scaled_lower_custom.faces, lower_seg_labels, lower_to_remove)
 
 upper_mesh_final = trimesh.Trimesh(vertices=upper_v, faces=upper_f, process=True)
@@ -762,17 +769,20 @@ print(f"  整體縮放: 上顎 {overall_scale_upper:.3f}x, 下顎 {overall_scale
 print("\n💾 [NEW] 輸出分離客製化模型 + seg_labels...")
 upper_only_path = OUTPUT_DIR / "custom_upper_only.obj"
 lower_only_path = OUTPUT_DIR / "custom_lower_only.obj"
-scaled_upper_custom.export(str(upper_only_path))
-scaled_lower_custom.export(str(lower_only_path))
-print(f"  ✓ 上顎: {upper_only_path.name}  ({len(scaled_upper_custom.vertices):,} 頂點)")
-print(f"  ✓ 下顎: {lower_only_path.name}  ({len(scaled_lower_custom.vertices):,} 頂點)")
+upper_mesh_final.export(str(upper_only_path))
+lower_mesh_final.export(str(lower_only_path))
+print(f"  ✓ 上顎: {upper_only_path.name}  ({len(upper_mesh_final.vertices):,} 頂點)")
+print(f"  ✓ 下顎: {lower_only_path.name}  ({len(lower_mesh_final.vertices):,} 頂點)")
 
-np.save(str(OUTPUT_DIR / "upper_seg_labels.npy"), upper_seg_labels)
-np.save(str(OUTPUT_DIR / "lower_seg_labels.npy"), lower_seg_labels)
-print(f"  ✓ seg_labels 已儲存")
+# seg_labels 用 remap 後的 used_verts 索引，與 mesh 頂點完全對齊
+upper_seg_labels_out = upper_seg_labels[upper_used]
+lower_seg_labels_out = lower_seg_labels[lower_used]
+np.save(str(OUTPUT_DIR / "upper_seg_labels.npy"), upper_seg_labels_out)
+np.save(str(OUTPUT_DIR / "lower_seg_labels.npy"), lower_seg_labels_out)
+print(f"  ✓ seg_labels 已儲存（移除缺牙後）")
 
-assert len(scaled_upper_custom.vertices) == len(upper_seg_labels)
-assert len(scaled_lower_custom.vertices) == len(lower_seg_labels)
+assert len(upper_mesh_final.vertices) == len(upper_seg_labels_out), f"上顎頂點數不符: {len(upper_mesh_final.vertices)} vs {len(upper_seg_labels_out)}"
+assert len(lower_mesh_final.vertices) == len(lower_seg_labels_out), f"下顎頂點數不符: {len(lower_mesh_final.vertices)} vs {len(lower_seg_labels_out)}"
 print(f"  ✅ 頂點數量與 seg_labels 一致驗證通過")
 
 glb_path = OUTPUT_DIR / "custom_real_teeth.glb"

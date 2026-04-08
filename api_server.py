@@ -30,6 +30,8 @@ from sqlalchemy.orm import Session
 import uvicorn, uuid, shutil, subprocess, json
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
+import requests
+from flask import Flask, Response, request
 TZ_TAIPEI = timezone(timedelta(hours=8))
 def now_taipei(): return datetime.now(TZ_TAIPEI).replace(tzinfo=None)
 
@@ -472,6 +474,35 @@ def health():
 
 app.mount("/static", StaticFiles(directory="/home/Zhen/projects/dental-web/static"), name="static")
 app.mount("/", StaticFiles(directory="/home/Zhen/projects/dental-web", html=True), name="web")
+# 樹梅派
+import requests
+from fastapi import Request, Response
+from fastapi.responses import HTMLResponse, StreamingResponse
+
+# --- [修改區] 請填入樹莓派當前的 IP ---
+PI_IP = "192.168.50.254" 
+
+@app.get("/pi_interface/{path:path}")
+@app.get("/pi_interface/")
+async def pi_proxy(request: Request, path: str = ""):
+    # 建立連向樹莓派的網址
+    pi_url = f"http://{PI_IP}:8080/{path}"
+    
+    # 取得原始請求的參數 (例如 ?query=... 之類的)
+    params = dict(request.query_params)
+    
+    try:
+        # 轉發請求給樹莓派
+        resp = requests.get(pi_url, params=params, timeout=5)
+        
+        # 將樹莓派的回應傳回給工作站網頁
+        return Response(
+            content=resp.content, 
+            status_code=resp.status_code, 
+            media_type=resp.headers.get("Content-Type")
+        )
+    except Exception as e:
+        return HTMLResponse(content=f"無法連線至樹莓派: {str(e)}", status_code=500)
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    uvicorn.run(app, host="0.0.0.0", port=8081)
