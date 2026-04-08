@@ -34,6 +34,7 @@ TZ_TAIPEI = timezone(timedelta(hours=8))
 def now_taipei(): return datetime.now(TZ_TAIPEI).replace(tzinfo=None)
 
 from database import get_db, init_db, Analysis, AnalysisType, AnalysisStatus, User
+from email_notify import send_analysis_done, send_analysis_failed
 from auth import (create_token, decode_token, authenticate_user,
                   create_user, get_user_by_email, get_user_by_id)
 
@@ -206,12 +207,31 @@ def run_init_pipeline(task_id: str, analysis_id: int, user_id: int):
 
         tasks[task_id].update({"status": "done", "step": "done", "result": result})
 
+        # 寄送完成通知
+        if user_id:
+            _db2 = next(get_db())
+            try:
+                _u = get_user_by_id(_db2, user_id)
+                if _u and _u.email:
+                    send_analysis_done(_u.email, _u.name, "init")
+            finally:
+                _db2.close()
+
     except Exception as e:
         if analysis:
             analysis.status    = AnalysisStatus.failed
             analysis.error_msg = str(e)
             db.commit()
         tasks[task_id].update({"status": "failed", "error": str(e)})
+        # 寄送失敗通知
+        if user_id:
+            _db2 = next(get_db())
+            try:
+                _u = get_user_by_id(_db2, user_id)
+                if _u and _u.email:
+                    send_analysis_failed(_u.email, _u.name, "init")
+            finally:
+                _db2.close()
     finally:
         db.close()
 
@@ -269,12 +289,31 @@ def run_plaque_pipeline(task_id: str, analysis_id: int, user_id: int):
 
         tasks[task_id].update({"status": "done", "step": "done", "result": result})
 
+        # 寄送完成通知
+        if user_id:
+            _db2 = next(get_db())
+            try:
+                _u = get_user_by_id(_db2, user_id)
+                if _u and _u.email:
+                    send_analysis_done(_u.email, _u.name, "plaque")
+            finally:
+                _db2.close()
+
     except Exception as e:
         if analysis:
             analysis.status    = AnalysisStatus.failed
             analysis.error_msg = str(e)
             db.commit()
         tasks[task_id].update({"status": "failed", "error": str(e)})
+        # 寄送失敗通知
+        if user_id:
+            _db2 = next(get_db())
+            try:
+                _u = get_user_by_id(_db2, user_id)
+                if _u and _u.email:
+                    send_analysis_failed(_u.email, _u.name, "plaque")
+            finally:
+                _db2.close()
     finally:
         db.close()
 
