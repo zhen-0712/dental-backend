@@ -1,17 +1,12 @@
 #!/usr/bin/env python3
 """
-project_plaque_by_fdi.py  ── SAT mask UV 對應版（per-tooth bbox + scale/offset 微調）
+project_plaque_by_fdi.py  ── SAT mask UV 對應版（優化版）
 
-流程：
-  對每個視角：
-  1. 載入 roi_mask_*.png
-  2. 用 SAT 跑一次 predict，取得 fdi_mask
-  3. 對每顆 FDI 牙：
-       a. 從 seg_labels 取出客製化模型的 3D 頂點
-       b. 用 SAT 上這顆牙的 bbox 做 normalize，把 3D 頂點投影過去
-       c. 套用 scale/offset 微調
-       d. 查詢 roi_mask 是否命中菌斑
-  4. 輸出染色後的 PLY / GLB / OBJ
+優化項目：
+  - save_debug_projection: 改用 numpy 向量化繪點（避免逐點 Python 迴圈）
+  - get_plaque_hit_verts: 批次 boolean indexing
+  - run_sat_for_view: 不變（GPU 操作）
+  - 主流程: 預先建立 fdi_map 時用 np.where 向量化，染色步驟向量化
 """
 
 import cv2
@@ -20,7 +15,6 @@ import trimesh
 import json
 from pathlib import Path
 
-# ==================== 路徑設定 ====================
 import sys; sys.path.insert(0, "/home/Zhen/projects/SegmentAnyTooth")
 from user_env import get_paths, setup_user_dirs, BASE as _SAT_BASE
 _PATHS = get_paths()
@@ -39,19 +33,9 @@ MODEL_PATH   = MODEL_DIR / "custom_real_teeth.obj"
 
 COLOR_NORMAL = np.array([0.92, 0.86, 0.80])
 
-# ==================== 各視角設定 ====================
-# proj_u_axis / proj_v_axis : 投影平面的兩個軸（0=X, 1=Y, 2=Z）
-# flip_u / flip_v           : 是否翻轉軸方向
-# scale_u / scale_v         : 投影縮放（以 SAT bbox 中心為基準）
-# offset_u / offset_v       : 中心偏移（單位：SAT bbox 的比例）
-#   負值 = 往左/往上，正值 = 往右/往下
-# vert_clip_pct             : 頂點離群值裁切（百分位數），0=不裁切，5=裁切最外5%
-#   用來解決某顆牙頂點含牙根/異常範圍導致 bbox 被拉大的問題
-
 VIEW_CONFIG = {
     'front': {
-        'sat_view':   'front',
-        'roi_mask':   'roi_mask_front.png',
+        'sat_view': 'front', 'roi_mask': 'roi_mask_front.png',
         'photo_file': 'real_teeth_processed/front.jpg',
         'proj_u_axis': 0, 'proj_v_axis': 2,
         'flip_u': True,  'flip_v': True,
@@ -60,8 +44,7 @@ VIEW_CONFIG = {
         'vert_clip_pct': 5,
     },
     'left_side': {
-        'sat_view':   'left',
-        'roi_mask':   'roi_mask_left_side.png',
+        'sat_view': 'left', 'roi_mask': 'roi_mask_left_side.png',
         'photo_file': 'real_teeth_processed/left_side.jpg',
         'proj_u_axis': 1, 'proj_v_axis': 2,
         'flip_u': False, 'flip_v': True,
@@ -70,24 +53,17 @@ VIEW_CONFIG = {
         'vert_clip_pct': 5,
     },
     'right_side': {
-        'sat_view':   'right',
-        'roi_mask':   'roi_mask_right_side.png',
+        'sat_view': 'right', 'roi_mask': 'roi_mask_right_side.png',
         'photo_file': 'real_teeth_processed/right_side.jpg',
         'proj_u_axis': 1, 'proj_v_axis': 2,
         'flip_u': True,  'flip_v': True,
         'scale_u': 1.0,  'scale_v': 0.55,
         'offset_u': -0.45, 'offset_v': -0.20,
-        # FDI 15 的頂點含大量牙根/異常點，裁切 10% 離群值
         'vert_clip_pct': 10,
     },
     'upper_occlusal': {
-        'sat_view':   'upper',
-        'roi_mask':   'roi_mask_upper_occlusal.png',
+        'sat_view': 'upper', 'roi_mask': 'roi_mask_upper_occlusal.png',
         'photo_file': 'real_teeth_processed/upper_occlusal.jpg',
-        # 咬合面照：照片水平 = 牙弓左右 = 3D X 軸
-        #           照片垂直 = 牙弓前後深度 = 3D Y 軸
-        # flip_u=True 讓左右方向對齊照片（病人右側在照片右）
-        # flip_v=True 讓前牙（Y 最小）出現在照片下方（符合上顎咬合照）
         'proj_u_axis': 0, 'proj_v_axis': 1,
         'flip_u': True,  'flip_v': True,
         'scale_u': 1.6,  'scale_v': 1.15,
@@ -95,10 +71,8 @@ VIEW_CONFIG = {
         'vert_clip_pct': 5,
     },
     'lower_occlusal': {
-        'sat_view':   'lower',
-        'roi_mask':   'roi_mask_lower_occlusal.png',
+        'sat_view': 'lower', 'roi_mask': 'roi_mask_lower_occlusal.png',
         'photo_file': 'real_teeth_processed/lower_occlusal.jpg',
-        # 下顎咬合面照：從下往上拍，前後方向和上顎相反
         'proj_u_axis': 0, 'proj_v_axis': 1,
         'flip_u': True,  'flip_v': False,
         'scale_u': 1.0,  'scale_v': 1.0,
@@ -106,6 +80,7 @@ VIEW_CONFIG = {
         'vert_clip_pct': 5,
     },
 }
+
 
 # ==================== 工具函式 ====================
 
@@ -123,7 +98,6 @@ def build_fdi_map(upper_verts, upper_labels, lower_verts, lower_labels):
 
 
 def get_sat_bbox(fdi_mask_sat, fdi):
-    """從 fdi_mask_sat 取出這顆牙的 bbox，回傳 (px_min, py_min, w, h, sat_w, sat_h) 或 None"""
     sat_h, sat_w = fdi_mask_sat.shape
     ys, xs = np.where(fdi_mask_sat == fdi)
     if len(ys) == 0:
@@ -135,63 +109,36 @@ def get_sat_bbox(fdi_mask_sat, fdi):
 
 
 def clip_tooth_verts(tooth_verts, clip_pct):
-    """
-    裁切頂點的離群值（percentile clipping）。
-    對 u/v 兩個投影軸各自裁切最外 clip_pct% 的頂點，
-    回傳裁切後的頂點陣列（形狀不變，但 range 縮小）。
-    這只影響 normalize 用的 min/max，不刪除任何頂點。
-    """
     if clip_pct <= 0:
         return tooth_verts
     lo, hi = clip_pct, 100 - clip_pct
     clipped = tooth_verts.copy()
     for ax in range(3):
         v = tooth_verts[:, ax]
-        vmin = np.percentile(v, lo)
-        vmax = np.percentile(v, hi)
-        clipped[:, ax] = np.clip(v, vmin, vmax)
+        clipped[:, ax] = np.clip(v, np.percentile(v, lo), np.percentile(v, hi))
     return clipped
 
 
 def project_tooth_verts(tooth_verts, cfg, sat_bbox):
-    """
-    把 3D 頂點投影到 SAT 上這顆牙的 bbox 像素座標。
-
-    流程：
-      0. 用 percentile clipping 排除離群頂點對 normalize range 的影響
-      1. 取兩個投影軸，normalize 到 [0,1]（以裁切後的 range 為基準）
-      2. flip
-      3. 套用 scale/offset（以 0.5 為中心縮放，再平移）
-      4. 映射到 SAT bbox 像素座標
-
-    sat_bbox = (px_min, py_min, bbox_w, bbox_h, sat_w, sat_h)
-    """
     u_ax = cfg['proj_u_axis']
     v_ax = cfg['proj_v_axis']
     px_min, py_min, bbox_w, bbox_h, sat_w, sat_h = sat_bbox
 
-    # Step 0: percentile clipping（只用來算 normalize range，不刪頂點）
-    clip_pct = cfg.get('vert_clip_pct', 0)
+    clip_pct  = cfg.get('vert_clip_pct', 0)
     ref_verts = clip_tooth_verts(tooth_verts, clip_pct)
 
-    u_vals = tooth_verts[:, u_ax]
-    v_vals = tooth_verts[:, v_ax]
-    u_ref  = ref_verts[:, u_ax]
-    v_ref  = ref_verts[:, v_ax]
+    u_vals = tooth_verts[:, u_ax];  v_vals = tooth_verts[:, v_ax]
+    u_ref  = ref_verts[:, u_ax];    v_ref  = ref_verts[:, v_ax]
 
-    # 用 ref_verts 的 range 做 normalize（排除異常頂點影響）
-    u_min, u_max = u_ref.min(), u_ref.max()
-    v_min, v_max = v_ref.min(), v_ref.max()
-    u_range = max(u_max - u_min, 1e-6)
-    v_range = max(v_max - v_min, 1e-6)
+    u_range = max(u_ref.max() - u_ref.min(), 1e-6)
+    v_range = max(v_ref.max() - v_ref.min(), 1e-6)
 
-    u_norm = (u_vals - u_min) / u_range
-    v_norm = (v_vals - v_min) / v_range
+    u_norm = (u_vals - u_ref.min()) / u_range
+    v_norm = (v_vals - v_ref.min()) / v_range
 
     if cfg['flip_u']: u_norm = 1.0 - u_norm
     if cfg['flip_v']: v_norm = 1.0 - v_norm
 
-    # scale / offset 微調（以 0.5 為中心縮放再平移）
     su = cfg.get('scale_u', 1.0);  sv = cfg.get('scale_v', 1.0)
     ou = cfg.get('offset_u', 0.0); ov = cfg.get('offset_v', 0.0)
     u_adj = (u_norm - 0.5) * su + 0.5 + ou
@@ -202,25 +149,25 @@ def project_tooth_verts(tooth_verts, cfg, sat_bbox):
     return px, py
 
 
-def get_plaque_hit_verts(fdi, tooth_verts, tooth_indices,
-                         fdi_mask_sat, roi_resized, cfg):
-    """回傳命中菌斑的 tooth_indices 子集"""
+def get_plaque_hit_verts(fdi, tooth_verts, tooth_indices, fdi_mask_sat, roi_resized, cfg):
     sat_bbox = get_sat_bbox(fdi_mask_sat, fdi)
     if sat_bbox is None:
         return np.array([], dtype=np.int64)
     px, py = project_tooth_verts(tooth_verts, cfg, sat_bbox)
-    return tooth_indices[roi_resized[py, px] > 0]
+    hit_mask = roi_resized[py, px] > 0
+    return tooth_indices[hit_mask]
+
+def _get_plaque_hit_verts_with_bbox(tooth_verts, tooth_indices, roi_resized, cfg, sat_bbox):
+    """已有 sat_bbox 時直接使用，不重複查找"""
+    px, py = project_tooth_verts(tooth_verts, cfg, sat_bbox)
+    hit_mask = roi_resized[py, px] > 0
+    return tooth_indices[hit_mask]
 
 
 def save_debug_projection(view_name, cfg, fdi_mask_sat, roi_mask, fdi_map, debug_dir):
     """
-    輸出 debug_proj_{view_name}.png
-      白色 = roi_mask 菌斑
-      灰色 = SAT 牙齒區域
-      藍框 = SAT bbox
-      黃字 = FDI 編號
-      綠點 = 3D 頂點投影（抽樣）
-      紅點 = 命中菌斑的頂點
+    優化版：改用 numpy 向量化繪點取代逐點 cv2.circle Python 迴圈
+    大幅減少當牙齒頂點多（>1000）時的繪圖時間
     """
     sat_h, sat_w = fdi_mask_sat.shape
     roi_r = cv2.resize(roi_mask, (sat_w, sat_h), interpolation=cv2.INTER_NEAREST) \
@@ -234,26 +181,33 @@ def save_debug_projection(view_name, cfg, fdi_mask_sat, roi_mask, fdi_map, debug
         if fdi not in fdi_map:
             continue
         _, tooth_verts, _ = fdi_map[fdi]
-
         sat_bbox = get_sat_bbox(fdi_mask_sat, fdi)
         if sat_bbox is None:
             continue
         px_min, py_min, bw, bh, sw, sh = sat_bbox
-
         px, py = project_tooth_verts(tooth_verts, cfg, sat_bbox)
 
-        # 綠：抽樣 200
-        sidx = np.random.choice(len(px), min(200, len(px)), replace=False)
-        for i in sidx:
-            cv2.circle(img, (px[i], py[i]), 1, (0, 200, 0), -1)
+        # ★ 向量化繪點：隨機抽樣後直接 numpy 賦值，不用 cv2.circle 迴圈
+        n = len(px)
+        if n > 0:
+            sidx = np.random.choice(n, min(200, n), replace=False)
+            # 把每個採樣點周圍 1px 設為綠色（模擬 radius=1 circle）
+            for dy in range(-1, 2):
+                for dx in range(-1, 2):
+                    gy = np.clip(py[sidx] + dy, 0, sat_h - 1)
+                    gx = np.clip(px[sidx] + dx, 0, sat_w - 1)
+                    img[gy, gx] = [0, 200, 0]
 
-        # 紅：命中菌斑
+        # 紅：命中菌斑（向量化）
         hit = roi_r[py, px] > 0
         hpx, hpy = px[hit], py[hit]
         if len(hpx) > 0:
             hidx = np.random.choice(len(hpx), min(100, len(hpx)), replace=False)
-            for i in hidx:
-                cv2.circle(img, (hpx[i], hpy[i]), 2, (0, 0, 255), -1)
+            for dy in range(-1, 2):
+                for dx in range(-1, 2):
+                    ry = np.clip(hpy[hidx] + dy, 0, sat_h - 1)
+                    rx = np.clip(hpx[hidx] + dx, 0, sat_w - 1)
+                    img[ry, rx] = [0, 0, 255]
 
         # FDI 標籤 + bbox
         cv2.putText(img, str(fdi),
@@ -286,9 +240,10 @@ def run_sat_for_view(view_name, cfg):
         print(f"    ⚠️  SAT 失敗: {e}")
         return None
 
+
 # ==================== 主流程 ====================
 print("=" * 60)
-print("🦷 菌斑投射 → 客製化 3D 模型（per-tooth bbox + scale/offset）")
+print("🦷 菌斑投射 → 客製化 3D 模型（優化版）")
 print("=" * 60)
 
 print("\n📦 載入客製化模型...")
@@ -328,13 +283,11 @@ for view_name, cfg in VIEW_CONFIG.items():
 
     roi_mask_path = ROI_MASK_DIR / cfg['roi_mask']
     if not roi_mask_path.exists():
-        print(f"    ⚠️  找不到 roi_mask，跳過")
-        continue
+        print(f"    ⚠️  找不到 roi_mask，跳過"); continue
 
     roi_mask = cv2.imread(str(roi_mask_path), cv2.IMREAD_GRAYSCALE)
     if roi_mask is None or roi_mask.max() == 0:
-        print(f"    ⚠️  roi_mask 為空，跳過")
-        continue
+        print(f"    ⚠️  roi_mask 為空，跳過"); continue
     print(f"    roi_mask 菌斑像素: {int((roi_mask > 0).sum()):,}")
 
     print(f"    跑 SAT...")
@@ -346,7 +299,6 @@ for view_name, cfg in VIEW_CONFIG.items():
     roi_resized = cv2.resize(roi_mask, (sat_w, sat_h), interpolation=cv2.INTER_NEAREST) \
                   if roi_mask.shape[:2] != (sat_h, sat_w) else roi_mask
 
-    # debug 圖
     save_debug_projection(view_name, cfg, fdi_mask_sat, roi_mask, fdi_map, debug_dir)
 
     view_hits = 0
@@ -356,18 +308,23 @@ for view_name, cfg in VIEW_CONFIG.items():
 
         jaw, tooth_verts, tooth_indices = fdi_map[fdi]
 
-        hit_idx = get_plaque_hit_verts(
-            fdi, tooth_verts, tooth_indices,
-            fdi_mask_sat, roi_resized, cfg)
+        # ★ sat_bbox 只算一次，共用給 hit_verts 和 plaque_on_tooth
+        sat_bbox = get_sat_bbox(fdi_mask_sat, fdi)
+        if sat_bbox is None:
+            continue
+        px_min, py_min, bbox_w, bbox_h, sat_w, sat_h = sat_bbox
 
+        hit_idx = _get_plaque_hit_verts_with_bbox(
+            tooth_verts, tooth_indices, roi_resized, cfg, sat_bbox)
         if len(hit_idx) == 0:
             continue
 
-        tooth_mask_2d = (fdi_mask_sat == fdi).astype(np.uint8)
-        plaque_on_tooth = int(
-            cv2.bitwise_and(roi_resized, roi_resized, mask=tooth_mask_2d).sum() / 255)
+        # ★ 只在 bbox 範圍內計算 plaque_on_tooth（不建立全圖 mask）
+        roi_crop   = roi_resized[py_min:py_min+bbox_h, px_min:px_min+bbox_w]
+        fdi_crop   = (fdi_mask_sat[py_min:py_min+bbox_h, px_min:px_min+bbox_w] == fdi)
+        plaque_on_tooth = int(roi_crop[fdi_crop].sum() // 255)
 
-        # 記錄所有 SAT 偵測到的 FDI（不管有無菌斑），作為投射命中率的分母
+        # 記錄所有 SAT 偵測到的 FDI（不管有無菌斑）
         sat_plaque_fdi_set.add(fdi)
 
         if plaque_on_tooth == 0:
@@ -382,7 +339,7 @@ for view_name, cfg in VIEW_CONFIG.items():
 
         if fdi not in fdi_plaque_summary:
             fdi_plaque_summary[fdi] = {'jaw': jaw, 'views': [],
-                                       'total_plaque_px': 0, 'hit_verts': 0}
+                                        'total_plaque_px': 0, 'hit_verts': 0}
         fdi_plaque_summary[fdi]['total_plaque_px'] += plaque_on_tooth
         fdi_plaque_summary[fdi]['hit_verts']       += len(hit_idx)
         if view_name not in fdi_plaque_summary[fdi]['views']:
@@ -393,25 +350,25 @@ for view_name, cfg in VIEW_CONFIG.items():
 
     print(f"    本視角命中頂點: {view_hits:,}")
 
-# ==================== 染色 ====================
+
+# ==================== 染色（向量化）====================
 print(f"\n🎨 染色...")
 
 upper_colors = np.tile(np.append(COLOR_NORMAL, 1.0), (n_upper, 1)).astype(np.float32)
 lower_colors = np.tile(np.append(COLOR_NORMAL, 1.0), (n_lower, 1)).astype(np.float32)
 
-is_p_u = upper_votes > 0
-if is_p_u.sum() > 0:
-    inten = 0.5 + 0.5 * upper_votes[is_p_u] / (upper_votes[is_p_u].max() + 1e-8)
-    upper_colors[is_p_u, 0] = inten
-    upper_colors[is_p_u, 1] = 0.05
-    upper_colors[is_p_u, 2] = 0.05
+def apply_plaque_color(votes, colors):
+    """向量化染色（避免兩次 boolean indexing）"""
+    is_p = votes > 0
+    if is_p.sum() > 0:
+        inten = 0.5 + 0.5 * votes[is_p] / (votes[is_p].max() + 1e-8)
+        colors[is_p, 0] = inten
+        colors[is_p, 1] = 0.05
+        colors[is_p, 2] = 0.05
+    return colors, is_p
 
-is_p_l = lower_votes > 0
-if is_p_l.sum() > 0:
-    inten = 0.5 + 0.5 * lower_votes[is_p_l] / (lower_votes[is_p_l].max() + 1e-8)
-    lower_colors[is_p_l, 0] = inten
-    lower_colors[is_p_l, 1] = 0.05
-    lower_colors[is_p_l, 2] = 0.05
+upper_colors, is_p_u = apply_plaque_color(upper_votes, upper_colors)
+lower_colors, is_p_l = apply_plaque_color(lower_votes, lower_colors)
 
 n_plaque = int(is_p_u.sum()) + int(is_p_l.sum())
 n_total  = n_upper + n_lower
@@ -419,12 +376,13 @@ print(f"  上顎菌斑頂點: {is_p_u.sum():,} / {n_upper:,}")
 print(f"  下顎菌斑頂點: {is_p_l.sum():,} / {n_lower:,}")
 print(f"  合計: {n_plaque:,} / {n_total:,} ({n_plaque/n_total*100:.2f}%)")
 
+# ★ 一次 concatenate（避免中間暫存）
 all_colors_u8 = (np.concatenate([upper_colors, lower_colors], axis=0) * 255).astype(np.uint8)
+
 
 # ==================== 輸出 ====================
 print(f"\n💾 輸出...")
 
-# 從 analysis JSON 取得缺牙清單
 _analysis_path = _PATHS["analysis"] / "real_teeth_analysis.json"
 _never_detected = []
 if _analysis_path.exists():
@@ -432,30 +390,31 @@ if _analysis_path.exists():
     _never_detected = _json.loads(_analysis_path.read_text()).get("never_detected", [])
     print(f"  缺牙移除: {_never_detected}")
 
-# combined + labels（含缺牙完整版）
-combined_raw = trimesh.util.concatenate([upper_mesh, lower_mesh])
+combined_raw    = trimesh.util.concatenate([upper_mesh, lower_mesh])
 combined_labels = np.concatenate([upper_labels, lower_labels])
 
-# 找出要保留的頂點（移除缺牙）
+# ★ 向量化建立 keep_mask（原本用迴圈）
 keep_mask = np.ones(len(combined_raw.vertices), dtype=bool)
-for _t in _never_detected:
-    keep_mask[combined_labels == _t] = False
+if _never_detected:
+    remove_mask = np.isin(combined_labels, _never_detected)
+    keep_mask[remove_mask] = False
 
 keep_indices = np.where(keep_mask)[0]
 index_map = np.full(len(combined_raw.vertices), -1, dtype=np.int64)
 index_map[keep_indices] = np.arange(len(keep_indices))
 
-# 過濾頂點、顏色、面
-out_verts = np.array(combined_raw.vertices)[keep_indices]
-all_colors_u8 = all_colors_u8[keep_indices]
-_old_faces = np.array(combined_raw.faces)
-_face_keep = keep_mask[_old_faces].all(axis=1)
-out_faces = index_map[_old_faces[_face_keep]]
+out_verts      = np.array(combined_raw.vertices)[keep_indices]
+all_colors_u8  = all_colors_u8[keep_indices]
+_old_faces     = np.array(combined_raw.faces)
+_face_keep     = keep_mask[_old_faces].all(axis=1)
+out_faces      = index_map[_old_faces[_face_keep]]
 print(f"  移除缺牙後: {len(out_verts):,} 頂點  {len(out_faces):,} 面")
+
 
 def export_mesh(path, verts, faces, colors):
     trimesh.Trimesh(vertices=verts, faces=faces,
                     vertex_colors=colors, process=False).export(str(path))
+
 
 ply = OUTPUT_DIR / "plaque_by_fdi.ply"
 export_mesh(ply, out_verts, out_faces, all_colors_u8)
@@ -468,12 +427,14 @@ print(f"  ✅ GLB: {glb.name}  ({glb.stat().st_size/1024/1024:.1f} MB)")
 obj = OUTPUT_DIR / "plaque_by_fdi.obj"
 with open(obj, 'w') as f:
     f.write("# plaque_by_fdi - vertex color OBJ\n\n")
+    # ★ 一次性寫入（batch string 避免逐行 format）
+    lines = []
     for v, c in zip(out_verts, all_colors_u8):
-        f.write(f"v {v[0]:.4f} {v[1]:.4f} {v[2]:.4f} "
-                f"{c[0]/255.:.4f} {c[1]/255.:.4f} {c[2]/255.:.4f}\n")
-    f.write("\n")
-    for face in out_faces:
-        f.write(f"f {face[0]+1} {face[1]+1} {face[2]+1}\n")
+        lines.append(f"v {v[0]:.4f} {v[1]:.4f} {v[2]:.4f} "
+                     f"{c[0]/255.:.4f} {c[1]/255.:.4f} {c[2]/255.:.4f}")
+    f.write('\n'.join(lines) + '\n\n')
+    face_lines = [f"f {r[0]+1} {r[1]+1} {r[2]+1}" for r in out_faces]
+    f.write('\n'.join(face_lines) + '\n')
 print(f"  ✅ OBJ: {obj.name}")
 
 stats = {
@@ -484,10 +445,10 @@ stats = {
     'fdi_plaque_summary': {str(k): v for k, v in sorted(fdi_plaque_summary.items())},
     'view_config_scale_offset': {
         vn: {
-            'scale_u':      vc.get('scale_u', 1.0),
-            'scale_v':      vc.get('scale_v', 1.0),
-            'offset_u':     vc.get('offset_u', 0.0),
-            'offset_v':     vc.get('offset_v', 0.0),
+            'scale_u':       vc.get('scale_u', 1.0),
+            'scale_v':       vc.get('scale_v', 1.0),
+            'offset_u':      vc.get('offset_u', 0.0),
+            'offset_v':      vc.get('offset_v', 0.0),
             'vert_clip_pct': vc.get('vert_clip_pct', 0),
         }
         for vn, vc in VIEW_CONFIG.items()
