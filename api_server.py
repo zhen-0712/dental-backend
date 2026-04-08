@@ -248,10 +248,17 @@ def run_plaque_pipeline(task_id: str, analysis_id: int, user_id: int):
             with open(stats_path) as f:
                 stats = json.load(f)
 
+        # 補存 tooth_analysis，讓 history 卡片能做多視角驗證計算
+        tooth_json = {}
+        tooth_path = udir / "real_teeth_analysis" / "real_teeth_analysis.json"
+        if tooth_path.exists():
+            with open(tooth_path) as f2:
+                tooth_json = json.load(f2)
         result = {
-            "glb_url":   "/files/plaque_by_fdi.glb",
-            "obj_url":   "/files/plaque_by_fdi.obj",
-            "stats":     stats,
+            "glb_url":       "/files/plaque_by_fdi.glb",
+            "obj_url":       "/files/plaque_by_fdi.obj",
+            "stats":         stats,
+            "tooth_analysis": tooth_json,
         }
 
         if analysis:

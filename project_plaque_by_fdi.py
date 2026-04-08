@@ -314,6 +314,7 @@ print(f"  FDI 映射: {len(fdi_map)} 顆牙  {sum(len(v[2]) for v in fdi_map.val
 upper_votes = np.zeros(n_upper, dtype=np.float32)
 lower_votes = np.zeros(n_lower, dtype=np.float32)
 fdi_plaque_summary = {}
+sat_plaque_fdi_set = set()
 
 print("\n🔍 逐視角 SAT mask UV 投射...")
 debug_dir = OUTPUT_DIR / "debug_proj"
@@ -365,6 +366,9 @@ for view_name, cfg in VIEW_CONFIG.items():
         tooth_mask_2d = (fdi_mask_sat == fdi).astype(np.uint8)
         plaque_on_tooth = int(
             cv2.bitwise_and(roi_resized, roi_resized, mask=tooth_mask_2d).sum() / 255)
+
+        # 記錄所有 SAT 偵測到的 FDI（不管有無菌斑），作為投射命中率的分母
+        sat_plaque_fdi_set.add(fdi)
 
         if plaque_on_tooth == 0:
             continue
@@ -476,6 +480,7 @@ stats = {
     'total_vertices': n_total,
     'plaque_vertices': n_plaque,
     'plaque_ratio': round(n_plaque / n_total, 4),
+    'sat_plaque_fdi_count': len(sat_plaque_fdi_set),
     'fdi_plaque_summary': {str(k): v for k, v in sorted(fdi_plaque_summary.items())},
     'view_config_scale_offset': {
         vn: {
