@@ -505,4 +505,4 @@ async def pi_proxy(request: Request, path: str = ""):
         return HTMLResponse(content=f"無法連線至樹莓派: {str(e)}", status_code=500)
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8081)
+    uvicorn.run(app, host="0.0.0.0", port=8080)

@@ -2,15 +2,19 @@
 """
 email_notify.py - 分析完成 Email 通知
 """
+import os
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
+from dotenv import load_dotenv
+
+load_dotenv()
 
 SMTP_HOST   = "smtp.gmail.com"
 SMTP_PORT   = 587
-SMTP_USER   = "zhen712@g.ncu.edu.tw"
-SMTP_PASS   = "gnvy dmuy dupc pbqh".replace(" ", "")
+SMTP_USER   = os.environ.get("SMTP_USER", "")
+SMTP_PASS   = os.environ.get("SMTP_PASS", "")
 SENDER_NAME = "DentalVis"
 
 

@@ -1,3 +1,4 @@
+.env
 weight/
 plaque_output/
 api_tasks/
