@@ -9,6 +9,9 @@ extract_plaque_regions.py（優化版）
   4. 主流程: 預先 resize 一次 fdi_resized，det 繪製時直接查表
 """
 
+import warnings
+warnings.filterwarnings('ignore')   # suppress SAM/HQ model-registry UserWarnings
+
 import cv2
 import numpy as np
 import json

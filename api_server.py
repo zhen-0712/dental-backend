@@ -140,13 +140,21 @@ def run_script(script_name: str, user_dir: Path = None) -> tuple[bool, str]:
     env = os.environ.copy()
     if user_dir:
         env["DENTAL_USER_DIR"] = str(user_dir)
+    env["PYTHONWARNINGS"] = "ignore"   # suppress model-registry UserWarnings flooding stderr
     result = subprocess.run(
         [PYTHON, str(BASE / script_name)],
         capture_output=True, text=True,
         cwd=str(BASE), timeout=600, env=env
     )
     if result.returncode != 0:
-        return False, result.stderr[-2000:]
+        # Filter out UserWarning lines so the real traceback is visible
+        def _clean(text: str) -> str:
+            lines = [l for l in text.splitlines()
+                     if 'UserWarning' not in l and 'register_model' not in l
+                     and 'Overwriting' not in l and 'site-packages' not in l]
+            return '\n'.join(lines).strip()
+        err = _clean(result.stderr) or _clean(result.stdout) or result.stderr[-1500:] or "unknown error"
+        return False, err[-2000:]
     return True, ""
 
 VIEW_FILENAMES = {
