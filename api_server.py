@@ -20,7 +20,7 @@ System:
   GET  /health         - 健康檢查
 """
 
-from fastapi import FastAPI, UploadFile, File, BackgroundTasks, Depends, HTTPException, status
+from fastapi import FastAPI, UploadFile, File, Form, BackgroundTasks, Depends, HTTPException, status
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -147,13 +147,19 @@ def run_script(script_name: str, user_dir: Path = None) -> tuple[bool, str]:
         cwd=str(BASE), timeout=600, env=env
     )
     if result.returncode != 0:
-        # Filter out UserWarning lines so the real traceback is visible
+        # Filter ONLY pure UserWarning lines (keep Traceback / Exception lines)
         def _clean(text: str) -> str:
-            lines = [l for l in text.splitlines()
-                     if 'UserWarning' not in l and 'register_model' not in l
-                     and 'Overwriting' not in l and 'site-packages' not in l]
-            return '\n'.join(lines).strip()
-        err = _clean(result.stderr) or _clean(result.stdout) or result.stderr[-1500:] or "unknown error"
+            keep = []
+            for l in text.splitlines():
+                if ('UserWarning' in l or
+                        ('Overwriting' in l and 'registry' in l) or
+                        ('register_model' in l and 'fn_wrapper' in l)):
+                    continue
+                keep.append(l)
+            return '\n'.join(keep).strip()
+        cleaned = _clean(result.stderr) or _clean(result.stdout)
+        raw     = result.stderr[-2000:] or result.stdout[-2000:]
+        err     = cleaned or raw or f"process exited with code {result.returncode} (no output)"
         return False, err[-2000:]
     return True, ""
 
@@ -165,13 +171,22 @@ VIEW_FILENAMES = {
     "lower_occlusal": "lower_occlusal.jpg",
 }
 
-def save_uploads(uploads: dict, real_teeth_dir: Path):
+def save_uploads(uploads: dict, real_teeth_dir: Path, mirror: bool = False):
+    import cv2, numpy as np
     real_teeth_dir.mkdir(parents=True, exist_ok=True)
     for view, upload in uploads.items():
         dest = real_teeth_dir / VIEW_FILENAMES[view]
         upload.file.seek(0)
+        raw = upload.file.read()
+        if mirror:
+            arr = np.frombuffer(raw, np.uint8)
+            img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+            if img is not None:
+                img = cv2.flip(img, 1)   # horizontal flip
+                cv2.imwrite(str(dest), img)
+                continue
         with open(dest, "wb") as f:
-            shutil.copyfileobj(upload.file, f)
+            f.write(raw)
 
 # ==================== 初始化流程 ====================
 
@@ -337,13 +352,14 @@ async def init_model(
     right_side:       UploadFile = File(...),
     upper_occlusal:   UploadFile = File(...),
     lower_occlusal:   UploadFile = File(...),
+    mirror:           str = Form("0"),
     user: User | None = Depends(get_current_user_optional),
     db:   Session     = Depends(get_db),
 ):
     _udir = user_data_dir(user.id) if user else BASE
     save_uploads({"front": front, "left_side": left_side, "right_side": right_side,
                   "upper_occlusal": upper_occlusal, "lower_occlusal": lower_occlusal},
-                 _udir / "real_teeth")
+                 _udir / "real_teeth", mirror=mirror == "1")
 
     task_id = str(uuid.uuid4())[:8]
     analysis_id = None
@@ -369,13 +385,14 @@ async def analyze_plaque(
     right_side:       UploadFile = File(...),
     upper_occlusal:   UploadFile = File(...),
     lower_occlusal:   UploadFile = File(...),
+    mirror:           str = Form("0"),
     user: User | None = Depends(get_current_user_optional),
     db:   Session     = Depends(get_db),
 ):
     _udir = user_data_dir(user.id) if user else BASE
     save_uploads({"front": front, "left_side": left_side, "right_side": right_side,
                   "upper_occlusal": upper_occlusal, "lower_occlusal": lower_occlusal},
-                 _udir / "real_teeth")
+                 _udir / "real_teeth", mirror=mirror == "1")
 
     task_id = str(uuid.uuid4())[:8]
     analysis_id = None
