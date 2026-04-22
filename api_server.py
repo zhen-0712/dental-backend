@@ -497,6 +497,65 @@ def favicon_svg():
 def health():
     return {"status": "ok"}
 
+# ===== Photo Quality Check =====
+_VIEW_REQ = {
+    "front":          {"minPink": 0.04, "minBrightness": 60},
+    "left_side":      {"minPink": 0.03, "minBrightness": 55},
+    "right_side":     {"minPink": 0.03, "minBrightness": 55},
+    "upper_occlusal": {"minPink": 0.02, "minBrightness": 50},
+    "lower_occlusal": {"minPink": 0.02, "minBrightness": 50},
+}
+
+@app.post("/check_photo")
+async def check_photo(file: UploadFile = File(...), view: str = Form("front")):
+    import cv2, numpy as np
+    contents = await file.read()
+    arr = np.frombuffer(contents, np.uint8)
+    img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    if img is None:
+        return {"ok": False, "issues": ["照片讀取失敗"], "tips": [], "stats": {}}
+
+    small = cv2.resize(img, (160, 120))
+    gray  = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+
+    avg_brightness = float(gray.mean())
+    blur_score     = float(cv2.Laplacian(gray, cv2.CV_64F).var())   # higher = sharper
+
+    b, g, r = small[:,:,0].astype(int), small[:,:,1].astype(int), small[:,:,2].astype(int)
+    pink_mask  = (r > 120) & (g < r * 0.85) & (b < r * 0.80) & (r > 80)
+    pink_ratio = float(pink_mask.sum()) / (160 * 120)
+
+    req    = _VIEW_REQ.get(view, _VIEW_REQ["front"])
+    issues, tips = [], []
+
+    if blur_score < 80:
+        issues.append("照片可能模糊")
+        tips.append("請確保手機對焦後再拍攝")
+    if avg_brightness < req["minBrightness"]:
+        issues.append("照片太暗")
+        tips.append("請在光線充足的地方拍攝，或開閃光燈")
+    elif avg_brightness > 220:
+        issues.append("照片過曝")
+        tips.append("請避免直接對著強光拍攝")
+    if pink_ratio < req["minPink"]:
+        if view in ("upper_occlusal", "lower_occlusal"):
+            issues.append("看不到足夠的牙齒區域")
+            tips.append("請盡量張嘴，讓咬合面完整露出")
+        else:
+            issues.append("嘴巴開口不足或角度偏差")
+            tips.append("請張大嘴，確保牙齒清楚可見")
+
+    return {
+        "ok":     len(issues) == 0,
+        "issues": issues,
+        "tips":   tips[:1],
+        "stats":  {
+            "brightness": round(avg_brightness),
+            "sharpness":  round(blur_score, 1),
+            "toothArea":  f"{pink_ratio*100:.1f}%",
+        },
+    }
+
 app.mount("/static", StaticFiles(directory="/home/Zhen/projects/dental-web/static"), name="static")
 app.mount("/", StaticFiles(directory="/home/Zhen/projects/dental-web", html=True), name="web")
 # 樹梅派
