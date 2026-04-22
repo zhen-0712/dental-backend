@@ -148,13 +148,7 @@ for view_name, cfg in VIEW_CONFIG.items():
     print(f"\n📷 {view_name}")
 
     mask_path  = MASK_DIR  / cfg['mask_file']
-    # 多張模式下 front.jpg 已被刪除，改用 front_0.jpg 做 SAT
     photo_path = PHOTO_DIR / cfg['photo_file']
-    if not photo_path.exists():
-        fallback = PHOTO_DIR / (cfg['photo_file'].replace('.jpg', '_0.jpg'))
-        if fallback.exists():
-            photo_path = fallback
-            print(f"  (使用多張模式照片: {fallback.name} 做 SAT)")
 
     if not mask_path.exists():
         print(f"  ⚠️  找不到 mask: {cfg['mask_file']}"); continue

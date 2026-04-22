@@ -482,45 +482,6 @@ async def init_model_multi(
     background_tasks.add_task(run_init_pipeline, task_id, analysis_id, _uid)
     return {"task_id": task_id, "status": "queued", "type": "init"}
 
-@app.post("/plaque_multi")
-async def analyze_plaque_multi(
-    background_tasks: BackgroundTasks,
-    request: Request,
-    user: User | None = Depends(get_current_user_optional),
-    db:   Session     = Depends(get_db),
-):
-    """多張照片菌斑分析模式"""
-    form = await request.form()
-    mirror = str(form.get("mirror", "0")) == "1"
-    uploads: dict[str, list] = {}
-    for key, value in form.multi_items():
-        if not hasattr(value, 'filename') or not hasattr(value, 'file'):
-            continue
-        matched = next(
-            (v for v in VIEW_FILENAMES if key.startswith(v + "_") and key[len(v)+1:].isdigit()),
-            None
-        )
-        if matched:
-            uploads.setdefault(matched, []).append(value)
-
-    if not uploads:
-        raise HTTPException(status_code=400, detail="未收到任何照片")
-
-    _udir = user_data_dir(user.id) if user else BASE
-    save_multi_uploads(uploads, _udir / "real_teeth", mirror=mirror)
-
-    task_id = str(uuid.uuid4())[:8]
-    analysis_id = None
-    if user:
-        analysis = Analysis(user_id=user.id, type=AnalysisType.plaque)
-        db.add(analysis); db.commit(); db.refresh(analysis)
-        analysis_id = analysis.id
-
-    _uid = user.id if user else None
-    tasks[task_id] = {"status": "queued", "step": "waiting", "type": "plaque",
-                      "analysis_id": analysis_id}
-    background_tasks.add_task(run_plaque_pipeline, task_id, analysis_id, _uid)
-    return {"task_id": task_id, "status": "queued", "type": "plaque"}
 
 @app.get("/analyses")
 def get_analyses(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
