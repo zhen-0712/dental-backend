@@ -40,6 +40,13 @@ VIEW_MAPPING = {
     'lower_occlusal.jpg': 'lower'
 }
 
+# 多張模式：view 基礎名稱 → 縮寫
+_MULTI_VIEW_NAMES = ['front', 'left_side', 'right_side', 'upper_occlusal', 'lower_occlusal']
+_MULTI_VIEW_SHORT = {
+    'front': 'front', 'left_side': 'left', 'right_side': 'right',
+    'upper_occlusal': 'upper', 'lower_occlusal': 'lower'
+}
+
 PIXEL_TO_MM = 0.15
 
 MEASUREMENT_DEFINITION = {
@@ -476,13 +483,31 @@ def main():
     all_measurements     = {}
     all_detected_by_view = {}
 
+    # ── 單張模式：front.jpg, left_side.jpg … ──
     for photo_name, view in VIEW_MAPPING.items():
         photo_path = REAL_TEETH_DIR / photo_name
         if not photo_path.exists():
-            print(f"  ⚠️  未找到: {photo_name}"); continue
+            continue
         mask, measurements, detected_list = analyze_single_photo(photo_path, view)
         all_measurements[photo_name]     = measurements
         all_detected_by_view[photo_name] = detected_list
+
+    # ── 多張模式：front_0.jpg, front_1.jpg, upper_occlusal_0.jpg … ──
+    # 每個 view 可以有多張，自動掃描直到第一個缺口
+    for view_name in _MULTI_VIEW_NAMES:
+        view_short = _MULTI_VIEW_SHORT[view_name]
+        for i in range(50):
+            photo_name = f"{view_name}_{i}.jpg"
+            photo_path = REAL_TEETH_DIR / photo_name
+            if not photo_path.exists():
+                break
+            mask, measurements, detected_list = analyze_single_photo(photo_path, view_short)
+            # 以唯一 key 存入 all_measurements（供 merge_multiview_detections 聯集）
+            all_measurements[photo_name] = measurements
+            # by_view 欄位：聯集同一 view 的所有偵測結果
+            base_key = f"{view_name}.jpg"
+            prev = set(all_detected_by_view.get(base_key, []))
+            all_detected_by_view[base_key] = sorted(prev | set(detected_list))
 
     merged     = merge_multiview_detections(all_measurements)
     classified = classify_by_position(merged)

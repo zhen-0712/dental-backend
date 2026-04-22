@@ -20,7 +20,7 @@ System:
   GET  /health         - 健康檢查
 """
 
-from fastapi import FastAPI, UploadFile, File, Form, BackgroundTasks, Depends, HTTPException, status
+from fastapi import FastAPI, UploadFile, File, Form, BackgroundTasks, Depends, HTTPException, status, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -174,6 +174,10 @@ VIEW_FILENAMES = {
 def save_uploads(uploads: dict, real_teeth_dir: Path, mirror: bool = False):
     import cv2, numpy as np
     real_teeth_dir.mkdir(parents=True, exist_ok=True)
+    # Clear any leftover multi-photo files from previous multi-mode run
+    for view in VIEW_FILENAMES:
+        for old in real_teeth_dir.glob(f"{view}_[0-9]*.jpg"):
+            old.unlink(missing_ok=True)
     for view, upload in uploads.items():
         dest = real_teeth_dir / VIEW_FILENAMES[view]
         upload.file.seek(0)
@@ -187,6 +191,30 @@ def save_uploads(uploads: dict, real_teeth_dir: Path, mirror: bool = False):
                 continue
         with open(dest, "wb") as f:
             f.write(raw)
+
+def save_multi_uploads(uploads: dict, real_teeth_dir: Path, mirror: bool = False):
+    """Save multiple photos per view as {view}_0.jpg, {view}_1.jpg …"""
+    import cv2, numpy as np
+    real_teeth_dir.mkdir(parents=True, exist_ok=True)
+    # Clear any leftover single-photo files from previous single-mode run
+    for view, fname in VIEW_FILENAMES.items():
+        p = real_teeth_dir / fname
+        if p.exists():
+            p.unlink()
+    for view, file_list in uploads.items():
+        for i, upload in enumerate(file_list):
+            dest = real_teeth_dir / f"{view}_{i}.jpg"
+            upload.file.seek(0)
+            raw = upload.file.read()
+            if mirror:
+                arr = np.frombuffer(raw, np.uint8)
+                img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+                if img is not None:
+                    img = cv2.flip(img, 1)
+                    cv2.imwrite(str(dest), img)
+                    continue
+            with open(dest, "wb") as f:
+                f.write(raw)
 
 # ==================== 初始化流程 ====================
 
@@ -410,6 +438,90 @@ async def analyze_plaque(
     background_tasks.add_task(run_plaque_pipeline, task_id, analysis_id, _uid)
     return {"task_id": task_id, "status": "queued", "type": "plaque"}
 
+@app.post("/init_multi")
+async def init_model_multi(
+    background_tasks: BackgroundTasks,
+    request: Request,
+    user: User | None = Depends(get_current_user_optional),
+    db:   Session     = Depends(get_db),
+):
+    """多張照片模式：每個視角可上傳多張，後端聯集辨識結果。
+    FormData 格式：front_0, front_1, left_side_0 … (檔名 = {view}_{index})
+    """
+    form = await request.form()
+    mirror = str(form.get("mirror", "0")) == "1"
+    uploads: dict[str, list] = {}
+    for key, value in form.multi_items():
+        # 用 duck typing 判斷是否為上傳檔（相容 FastAPI/Starlette 兩種 UploadFile）
+        if not hasattr(value, 'filename') or not hasattr(value, 'file'):
+            continue
+        # 解析 view 名稱：找最長符合的 view 前綴
+        matched = next(
+            (v for v in VIEW_FILENAMES if key.startswith(v + "_") and key[len(v)+1:].isdigit()),
+            None
+        )
+        if matched:
+            uploads.setdefault(matched, []).append(value)
+
+    if not uploads:
+        raise HTTPException(status_code=400, detail="未收到任何照片")
+
+    _udir = user_data_dir(user.id) if user else BASE
+    save_multi_uploads(uploads, _udir / "real_teeth", mirror=mirror)
+
+    task_id = str(uuid.uuid4())[:8]
+    analysis_id = None
+    if user:
+        analysis = Analysis(user_id=user.id, type=AnalysisType.init)
+        db.add(analysis); db.commit(); db.refresh(analysis)
+        analysis_id = analysis.id
+
+    _uid = user.id if user else None
+    tasks[task_id] = {"status": "queued", "step": "waiting", "type": "init",
+                      "analysis_id": analysis_id}
+    background_tasks.add_task(run_init_pipeline, task_id, analysis_id, _uid)
+    return {"task_id": task_id, "status": "queued", "type": "init"}
+
+@app.post("/plaque_multi")
+async def analyze_plaque_multi(
+    background_tasks: BackgroundTasks,
+    request: Request,
+    user: User | None = Depends(get_current_user_optional),
+    db:   Session     = Depends(get_db),
+):
+    """多張照片菌斑分析模式"""
+    form = await request.form()
+    mirror = str(form.get("mirror", "0")) == "1"
+    uploads: dict[str, list] = {}
+    for key, value in form.multi_items():
+        if not hasattr(value, 'filename') or not hasattr(value, 'file'):
+            continue
+        matched = next(
+            (v for v in VIEW_FILENAMES if key.startswith(v + "_") and key[len(v)+1:].isdigit()),
+            None
+        )
+        if matched:
+            uploads.setdefault(matched, []).append(value)
+
+    if not uploads:
+        raise HTTPException(status_code=400, detail="未收到任何照片")
+
+    _udir = user_data_dir(user.id) if user else BASE
+    save_multi_uploads(uploads, _udir / "real_teeth", mirror=mirror)
+
+    task_id = str(uuid.uuid4())[:8]
+    analysis_id = None
+    if user:
+        analysis = Analysis(user_id=user.id, type=AnalysisType.plaque)
+        db.add(analysis); db.commit(); db.refresh(analysis)
+        analysis_id = analysis.id
+
+    _uid = user.id if user else None
+    tasks[task_id] = {"status": "queued", "step": "waiting", "type": "plaque",
+                      "analysis_id": analysis_id}
+    background_tasks.add_task(run_plaque_pipeline, task_id, analysis_id, _uid)
+    return {"task_id": task_id, "status": "queued", "type": "plaque"}
+
 @app.get("/analyses")
 def get_analyses(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     analyses = db.query(Analysis).filter(Analysis.user_id == user.id)\
@@ -555,6 +667,16 @@ async def check_photo(file: UploadFile = File(...), view: str = Form("front")):
             "toothArea":  f"{pink_ratio*100:.1f}%",
         },
     }
+
+@app.get("/static/js/{filename:path}")
+async def serve_js(filename: str):
+    path = Path("/home/Zhen/projects/dental-web/static/js") / filename
+    if not path.exists():
+        return JSONResponse(status_code=404, content={"error": "not found"})
+    return FileResponse(
+        str(path), media_type="application/javascript",
+        headers={"Cache-Control": "no-cache, must-revalidate"}
+    )
 
 app.mount("/static", StaticFiles(directory="/home/Zhen/projects/dental-web/static"), name="static")
 app.mount("/", StaticFiles(directory="/home/Zhen/projects/dental-web", html=True), name="web")

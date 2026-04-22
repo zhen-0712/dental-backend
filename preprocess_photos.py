@@ -234,13 +234,27 @@ print("="*60)
 print(f"輸入: {INPUT_DIR}")
 print(f"輸出: {OUTPUT_DIR}")
 
-count = 0
-for photo_name, light_type in PHOTO_CONFIG.items():
-    input_path = INPUT_DIR / photo_name
-    if not input_path.exists():
-        print(f"\n  ⚠️  找不到: {photo_name}")
-        continue
+# ── 動態收集要處理的檔案（支援單張與多張模式）──
+_VIEWS = ['front', 'left_side', 'right_side', 'upper_occlusal', 'lower_occlusal']
+files_to_process: dict[str, str] = {}  # photo_name -> light_type
 
+# 單張模式：front.jpg, left_side.jpg …
+for photo_name, light_type in PHOTO_CONFIG.items():
+    if (INPUT_DIR / photo_name).exists():
+        files_to_process[photo_name] = light_type
+
+# 多張模式：front_0.jpg, front_1.jpg, upper_occlusal_0.jpg …
+for view in _VIEWS:
+    for i in range(50):
+        photo_name = f"{view}_{i}.jpg"
+        if (INPUT_DIR / photo_name).exists():
+            files_to_process[photo_name] = 'phone_normal'
+        else:
+            break  # 每個 view 以第一個缺口為止
+
+count = 0
+for photo_name, light_type in files_to_process.items():
+    input_path = INPUT_DIR / photo_name
     print(f"\n{'─'*50}")
     print(f"  📷 {photo_name}  [{light_type}]")
 
