@@ -15,7 +15,7 @@ SMTP_HOST   = "smtp.gmail.com"
 SMTP_PORT   = 587
 SMTP_USER   = os.environ.get("SMTP_USER", "")
 SMTP_PASS   = os.environ.get("SMTP_PASS", "")
-SENDER_NAME = "DentalVis"
+SENDER_NAME = "Smile Guardian"
 
 
 def send_analysis_done(to_email: str, user_name: str, analysis_type: str,
@@ -24,7 +24,7 @@ def send_analysis_done(to_email: str, user_name: str, analysis_type: str,
     type_label = "牙齒初始化" if analysis_type == "init" else "菌斑分析"
     now_str    = datetime.now().strftime("%Y/%m/%d %H:%M")
 
-    subject = f"[DentalVis] {type_label}已完成"
+    subject = f"[Smile Guardian] {type_label}已完成"
 
     html = f"""
 <!DOCTYPE html>
@@ -37,8 +37,8 @@ def send_analysis_done(to_email: str, user_name: str, analysis_type: str,
 
         <!-- Header -->
         <tr><td style="background:#03695e;padding:28px 32px;">
-          <div style="font-size:22px;font-weight:700;color:#ffffff;letter-spacing:0.5px;">DentalVis</div>
-          <div style="font-size:13px;color:rgba(255,255,255,0.75);margin-top:4px;">Dental Health Analysis</div>
+          <div style="font-size:22px;font-weight:700;color:#ffffff;letter-spacing:0.5px;">Smile Guardian</div>
+          <div style="font-size:13px;color:rgba(255,255,255,0.75);margin-top:4px;">牙齒健康分析</div>
         </td></tr>
 
         <!-- Body -->
@@ -80,14 +80,14 @@ def send_analysis_done(to_email: str, user_name: str, analysis_type: str,
 
           <p style="margin:0;font-size:12px;color:#aab8b4;line-height:1.6;">
             此信件由系統自動發送，請勿直接回覆。<br>
-            如有問題請聯絡 NCU DentalVis 團隊。
+            如有問題請聯絡 NCU Smile Guardian 團隊。
           </p>
         </td></tr>
 
         <!-- Footer -->
         <tr><td style="background:#f4f6ef;padding:16px 32px;border-top:1px solid #eaede3;">
           <p style="margin:0;font-size:11px;color:#aab8b4;text-align:center;">
-            © 2026 DentalVis · National Central University
+            © 2026 Smile Guardian · National Central University
           </p>
         </td></tr>
 
@@ -124,7 +124,7 @@ def send_analysis_failed(to_email: str, user_name: str, analysis_type: str, erro
     """分析失敗通知信"""
     type_label = "牙齒初始化" if analysis_type == "init" else "菌斑分析"
     now_str    = datetime.now().strftime("%Y/%m/%d %H:%M")
-    subject    = f"[DentalVis] {type_label}發生錯誤"
+    subject    = f"[Smile Guardian] {type_label}發生錯誤"
 
     html = f"""
 <!DOCTYPE html>
@@ -136,7 +136,7 @@ def send_analysis_failed(to_email: str, user_name: str, analysis_type: str, erro
       <table width="560" cellpadding="0" cellspacing="0"
              style="background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(3,105,94,0.10);">
         <tr><td style="background:#c0392b;padding:28px 32px;">
-          <div style="font-size:22px;font-weight:700;color:#ffffff;">DentalVis</div>
+          <div style="font-size:22px;font-weight:700;color:#ffffff;">Smile Guardian</div>
           <div style="font-size:13px;color:rgba(255,255,255,0.75);margin-top:4px;">分析失敗通知</div>
         </td></tr>
         <tr><td style="padding:32px;">
@@ -148,7 +148,7 @@ def send_analysis_failed(to_email: str, user_name: str, analysis_type: str, erro
         </td></tr>
         <tr><td style="background:#f4f6ef;padding:16px 32px;border-top:1px solid #eaede3;">
           <p style="margin:0;font-size:11px;color:#aab8b4;text-align:center;">
-            © 2026 DentalVis · National Central University
+            © 2026 Smile Guardian · National Central University
           </p>
         </td></tr>
       </table>
