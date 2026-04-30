@@ -327,8 +327,16 @@ def run_plaque_pipeline(task_id: str, analysis_id: int, user_id: int):
         if tooth_path.exists():
             with open(tooth_path) as f2:
                 tooth_json = json.load(f2)
+        # Save a per-analysis copy of the GLB for timeline animation
+        glb_src = udir / "plaque_output" / "plaque_by_fdi.glb"
+        if analysis_id and glb_src.exists():
+            import shutil
+            glb_copy = udir / "plaque_output" / f"plaque_by_fdi_{analysis_id}.glb"
+            shutil.copy2(str(glb_src), str(glb_copy))
+
+        glb_fname = f"plaque_by_fdi_{analysis_id}.glb" if analysis_id else "plaque_by_fdi.glb"
         result = {
-            "glb_url":       "/files/plaque_by_fdi.glb",
+            "glb_url":       f"/files/{glb_fname}",
             "obj_url":       "/files/plaque_by_fdi.obj",
             "stats":         stats,
             "tooth_analysis": tooth_json,
@@ -437,6 +445,7 @@ async def analyze_plaque(
                       "analysis_id": analysis_id}
     background_tasks.add_task(run_plaque_pipeline, task_id, analysis_id, _uid)
     return {"task_id": task_id, "status": "queued", "type": "plaque"}
+
 
 @app.post("/init_multi")
 async def init_model_multi(
