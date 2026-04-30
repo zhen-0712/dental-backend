@@ -29,13 +29,13 @@ OUTPUT_DIR   = _PATHS["model_dir"]
 # ==================== 配置（與原版完全相同）====================
 ENABLE_RATIO_ADJUSTMENT   = True
 MAX_RATIO_SCALE           = 1.05
-MIN_RATIO_SCALE           = 0.85
+MIN_RATIO_SCALE           = 0.80
 RATIO_ADJUSTMENT_STRENGTH = 0.5
 
 ENABLE_OVERALL_ADJUSTMENT  = True
 OVERALL_SCALE_MODE         = 'smart'
-OVERALL_SCALE_STRENGTH     = 1.2
-MAX_OVERALL_SCALE          = 1.15
+OVERALL_SCALE_STRENGTH     = 1.0
+MAX_OVERALL_SCALE          = 1.10
 MIN_OVERALL_SCALE          = 0.85
 
 VIEW_WEIGHTS = {'front': 1.5, 'upper': 1.2, 'lower': 1.2, 'left': 0.6, 'right': 0.6}
@@ -61,7 +61,7 @@ UPPER_ROTATE_180             = True
 UPPER_ROTATE_ANGLE_Z         = -115.0
 VERTICAL_SPACING             = 10.0
 UPPER_JAW_OPENING_ANGLE      = -50.0
-ARCH_COMPRESSION_RATIO_UPPER = 0.75
+ARCH_COMPRESSION_RATIO_UPPER = 0.85
 ARCH_COMPRESSION_RATIO_LOWER = 0.82
 UPPER_TILT_CORRECTION_Y      = -8.0
 UPPER_TILT_CORRECTION_Z      = 3.0
@@ -233,7 +233,7 @@ def build_tooth_face_groups(faces, vertex_labels):
 def remove_teeth_from_mesh(vertices, faces, vertex_labels, teeth_to_remove):
     """移除指定牙齒的 face，並重新 remap vertex index 移除孤立頂點"""
     if not teeth_to_remove:
-        return vertices, faces
+        return vertices, faces, np.arange(len(vertices))
     faces = np.asarray(faces, dtype=np.int32)
     tooth_face_groups = build_tooth_face_groups(faces, vertex_labels)
 
@@ -242,7 +242,7 @@ def remove_teeth_from_mesh(vertices, faces, vertex_labels, teeth_to_remove):
     ) if any(t in tooth_face_groups for t in teeth_to_remove) else np.array([], dtype=np.int64)
 
     if len(remove_face_idx) == 0:
-        return vertices, faces
+        return vertices, faces, np.arange(len(vertices))
 
     mask_faces = np.ones(len(faces), dtype=bool)
     mask_faces[remove_face_idx] = False
@@ -364,7 +364,7 @@ def apply_customized_scaling(mesh, seg_labels, tooth_scales):
 def normalize_anterior_incisal_height(mesh, seg_labels, analysis_data, teeth_list):
     print("\n📐 前牙切緣高度正規化...")
     NORMALIZE_TEETH = {11, 12, 21, 22, 31, 32, 41, 42}
-    BLEND = 0.8
+    BLEND = 0.25
     vertices = mesh.vertices.copy()
     tooth_info = {}
 
@@ -440,15 +440,6 @@ def normalize_anterior_incisal_height(mesh, seg_labels, analysis_data, teeth_lis
         rel_z = tooth_verts[crown_mask, 2] - z_cej
         vertices[indices[crown_mask], 2] = z_cej + rel_z * SHORTEN_RATIO
         print(f"    #{tooth_id}: 牙冠縮短至 {SHORTEN_RATIO*100:.0f}%")
-
-    LIFT_TEETH = {11, 21}
-    LIFT_MM = 2.0; PUSH_IN_MM = 1.5
-    for tooth_id in LIFT_TEETH:
-        indices = np.nonzero(seg_labels == tooth_id)[0]
-        if len(indices) == 0: continue
-        vertices[indices, 2] += LIFT_MM
-        vertices[indices, 1] += PUSH_IN_MM
-        print(f"    #{tooth_id}: 往上平移 {LIFT_MM:.1f}mm, 往舌側 {PUSH_IN_MM:.1f}mm")
 
     result.vertices = vertices
     return result
@@ -561,9 +552,10 @@ def apply_tilt_correction(mesh, seg_labels, analysis_data, teeth_list):
 def apply_incisal_curvature(mesh, seg_labels, analysis_data, teeth_list):
     print("\n📐 前牙切緣輪廓修正...")
     INCISAL_TEETH   = {11, 12, 13, 21, 22, 23, 31, 32, 33, 41, 42, 43}
-    BLEND_STRENGTH  = 0.8
+    BLEND_STRENGTH  = 0.4
     CROWN_TOP_RATIO = 0.30
-    MAX_Z_SHIFT     = 1.5
+    MAX_Z_SHIFT     = 0.8
+    MIN_CP_X_RANGE  = 2.0
     vertices        = mesh.vertices.copy()
     corrected_count = 0
 
@@ -609,6 +601,8 @@ def apply_incisal_curvature(mesh, seg_labels, analysis_data, teeth_list):
         verts_x_rel = tooth_verts[:, 0] - x_center
         cp_xs  = np.array([x_msl, x_mid, x_dst])
         cp_dzs = np.array([dz_msl, dz_mid, dz_dst])
+        if cp_xs.max() - cp_xs.min() < MIN_CP_X_RANGE:
+            continue
         coeffs = np.polyfit(cp_xs, cp_dzs, 2)
         z_offsets = np.polyval(coeffs, verts_x_rel)
         out_of_range = (verts_x_rel < cp_xs.min()) | (verts_x_rel > cp_xs.max())
@@ -719,6 +713,26 @@ print(f"  ✓ 牙弓壓縮: 上顎 {ARCH_COMPRESSION_RATIO_UPPER}x, 下顎 {ARCH
 all_tooth_scales = {**upper_scales, **lower_scales}
 
 print("\n🦷 生成客製化模型...")
+
+# 整體牙齒 Z 軸加高（所有牙齒頂點一起縮放，不造成邊界撕裂）
+TOOTH_HEIGHT_BOOST = 1.10
+INCISOR_BOOST      = 1.04
+INCISOR_IDS        = {11, 12, 21, 22, 31, 32, 41, 42}
+for mesh_obj, seg_lbl in [(scaled_upper_custom, upper_seg_labels),
+                           (scaled_lower_custom, lower_seg_labels)]:
+    verts = mesh_obj.vertices.copy()
+    tooth_mask = seg_lbl > 0
+    z_mean = verts[tooth_mask, 2].mean()
+    verts[tooth_mask, 2] = z_mean + (verts[tooth_mask, 2] - z_mean) * TOOTH_HEIGHT_BOOST
+    for tid in INCISOR_IDS:
+        idx = np.where(seg_lbl == tid)[0]
+        if len(idx) == 0: continue
+        z_c = verts[idx, 2].mean()
+        correction = INCISOR_BOOST / TOOTH_HEIGHT_BOOST
+        verts[idx, 2] = z_c + (verts[idx, 2] - z_c) * correction
+    mesh_obj.vertices = verts
+print(f"  ✓ 牙齒高度 ×{TOOTH_HEIGHT_BOOST}（門牙 ×{INCISOR_BOOST}）")
+
 upper_to_remove = [t for t in never_detected if t < 30]
 lower_to_remove = [t for t in never_detected if t >= 30]
 
@@ -729,8 +743,10 @@ lower_v, lower_f, lower_used = remove_teeth_from_mesh(
 
 upper_mesh_final = trimesh.Trimesh(vertices=upper_v, faces=upper_f, process=True)
 upper_mesh_final.remove_degenerate_faces(); upper_mesh_final.remove_duplicate_faces()
+upper_mesh_final.fix_normals()
 lower_mesh_final = trimesh.Trimesh(vertices=lower_v, faces=lower_f, process=True)
 lower_mesh_final.remove_degenerate_faces(); lower_mesh_final.remove_duplicate_faces()
+lower_mesh_final.fix_normals()
 
 full_mesh   = trimesh.util.concatenate([upper_mesh_final, lower_mesh_final])
 output_file = OUTPUT_DIR / "custom_real_teeth.obj"
