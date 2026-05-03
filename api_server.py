@@ -327,14 +327,15 @@ def run_plaque_pipeline(task_id: str, analysis_id: int, user_id: int):
         if tooth_path.exists():
             with open(tooth_path) as f2:
                 tooth_json = json.load(f2)
-        # Save a per-analysis copy of the GLB for timeline animation
+        # Save a per-analysis copy of the GLB (date-stamped) for history timeline
         glb_src = udir / "plaque_output" / "plaque_by_fdi.glb"
+        glb_fname = "plaque_by_fdi.glb"
         if analysis_id and glb_src.exists():
             import shutil
-            glb_copy = udir / "plaque_output" / f"plaque_by_fdi_{analysis_id}.glb"
+            date_str = now_taipei().strftime("%Y%m%d")
+            glb_fname = f"plaque_{date_str}_{analysis_id}.glb"
+            glb_copy = udir / "plaque_output" / glb_fname
             shutil.copy2(str(glb_src), str(glb_copy))
-
-        glb_fname = f"plaque_by_fdi_{analysis_id}.glb" if analysis_id else "plaque_by_fdi.glb"
         result = {
             "glb_url":       f"/files/{glb_fname}",
             "obj_url":       "/files/plaque_by_fdi.obj",
@@ -507,6 +508,71 @@ def get_analyses(user: User = Depends(get_current_user), db: Session = Depends(g
         }
         for a in analyses
     ]
+
+@app.get("/plaque_models")
+def get_plaque_models(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Return plaque analyses whose GLB file actually exists on disk."""
+    udir = user_data_dir(user.id)
+    plaque_dir = udir / "plaque_output"
+    analyses = db.query(Analysis).filter(
+        Analysis.user_id == user.id,
+        Analysis.type == AnalysisType.plaque,
+        Analysis.status == AnalysisStatus.done,
+    ).order_by(Analysis.created_at.asc()).all()
+
+    result = []
+    for a in analyses:
+        if not a.result_json:
+            continue
+        r = json.loads(a.result_json)
+        glb_url = r.get("glb_url", "")
+        # Extract filename from url like /files/plaque_xxx.glb
+        fname = glb_url.split("/files/")[-1] if "/files/" in glb_url else ""
+        if not fname:
+            continue
+        # Skip the generic non-timestamped file — not unique per analysis
+        if fname == "plaque_by_fdi.glb":
+            continue
+        glb_path = plaque_dir / fname
+        if not glb_path.exists():
+            continue
+        result.append({
+            "id":         a.id,
+            "date":       a.created_at.strftime("%Y-%m-%d"),
+            "created_at": a.created_at.isoformat(),
+            "glb_url":    glb_url,
+        })
+    return result
+
+@app.post("/generate_gif")
+async def generate_gif(request: Request):
+    from PIL import Image
+    import base64, io as _io
+    body = await request.json()
+    frames = body.get("frames", [])
+    delay  = int(body.get("delay", 1000))
+    if len(frames) < 2:
+        return JSONResponse(status_code=400, content={"error": "need at least 2 frames"})
+
+    pil_frames = []
+    for f in frames:
+        data = f.split(",", 1)[1] if "," in f else f
+        img = Image.open(_io.BytesIO(base64.b64decode(data))).convert("RGB")
+        pil_frames.append(img)
+
+    buf = _io.BytesIO()
+    pil_frames[0].save(
+        buf, format="GIF", save_all=True,
+        append_images=pil_frames[1:],
+        loop=0, duration=delay, optimize=True,
+    )
+    buf.seek(0)
+    from fastapi.responses import Response as _Resp
+    return _Resp(
+        content=buf.read(), media_type="image/gif",
+        headers={"Content-Disposition": 'attachment; filename="plaque_history.gif"',
+                 "Access-Control-Allow-Origin": "*"},
+    )
 
 @app.get("/model_status")
 def model_status(user: User | None = Depends(get_current_user_optional)):

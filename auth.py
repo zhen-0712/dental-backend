@@ -11,7 +11,7 @@ from database import User
 
 SECRET_KEY  = "dentalvis-secret-key-2026-ncu-dental-ai"
 ALGORITHM   = "HS256"
-TOKEN_EXPIRE_HOURS = 24 * 7   # 7 天
+TOKEN_EXPIRE_HOURS = 24 * 90  # 90 天
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
