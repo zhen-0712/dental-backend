@@ -327,8 +327,9 @@ def run_plaque_pipeline(task_id: str, analysis_id: int, user_id: int):
         if tooth_path.exists():
             with open(tooth_path) as f2:
                 tooth_json = json.load(f2)
-        # Save a per-analysis copy of the GLB (date-stamped) for history timeline
+        # Save per-analysis copies of GLB and OBJ (date-stamped) for history timeline and 360° GIF
         glb_src = udir / "plaque_output" / "plaque_by_fdi.glb"
+        obj_src = udir / "plaque_output" / "plaque_by_fdi.obj"
         glb_fname = "plaque_by_fdi.glb"
         if analysis_id and glb_src.exists():
             import shutil
@@ -336,6 +337,9 @@ def run_plaque_pipeline(task_id: str, analysis_id: int, user_id: int):
             glb_fname = f"plaque_{date_str}_{analysis_id}.glb"
             glb_copy = udir / "plaque_output" / glb_fname
             shutil.copy2(str(glb_src), str(glb_copy))
+            if obj_src.exists():
+                obj_copy = udir / "plaque_output" / f"plaque_{date_str}_{analysis_id}.obj"
+                shutil.copy2(str(obj_src), str(obj_copy))
         result = {
             "glb_url":       f"/files/{glb_fname}",
             "obj_url":       "/files/plaque_by_fdi.obj",
@@ -543,6 +547,152 @@ def get_plaque_models(user: User = Depends(get_current_user), db: Session = Depe
             "glb_url":    glb_url,
         })
     return result
+
+# ==================== 360° GIF Pipeline ====================
+
+def _load_and_render_obj(obj_path, _trimesh, _np, _KDTree, _P3D, _plt,
+                          LIGHT, AMBIENT, BG, N_FRAMES=16, PAUSE=3):
+    """Load one plaque model and return rendered frames.
+    Reuses the matplotlib figure across frames for speed (~3-4x faster).
+    """
+    scene  = _trimesh.load(str(obj_path), force='scene')
+    geo    = list(scene.geometry.values())[0]
+    orig_v = _np.array(geo.vertices)
+    orig_c = _np.array(geo.visual.vertex_colors)[:, :3] / 255.0
+    # 12k faces: ~3x faster than 40k, still clearly shows teeth and plaque
+    dec    = geo.simplify_quadric_decimation(face_count=12000)
+    dec_v  = _np.array(dec.vertices)
+    dec_f  = _np.array(dec.faces)
+    _, idx = _KDTree(orig_v).query(dec_v)
+    colors = orig_c[idx].copy()
+    is_p   = (colors[:, 0] > 0.5) & (colors[:, 1] < 0.4)
+    colors[~is_p] = [0.94, 0.93, 0.91]
+    colors[is_p]  = [0.88, 0.12, 0.12]
+    fv = dec_v[dec_f];  fc = colors[dec_f].mean(1)
+    v0, v1, v2 = fv[:,0], fv[:,1], fv[:,2]
+    normals = _np.cross(v1-v0, v2-v0).astype(_np.float32)
+    mag     = _np.linalg.norm(normals, axis=1, keepdims=True)
+    normals /= _np.where(mag < 1e-8, 1.0, mag)
+    bounds  = geo.bounds
+
+    # Create figure once and reuse — only update colors + view angle each frame
+    fig  = _plt.figure(figsize=(8, 8), facecolor=BG)
+    ax   = fig.add_subplot(111, projection='3d')
+    ax.set_facecolor(BG)
+    poly = _P3D(fv, alpha=1.0, linewidth=0, antialiased=False)
+    ax.add_collection3d(poly)
+    b = bounds
+    ax.set_xlim(b[0,0], b[1,0]); ax.set_ylim(b[0,1], b[1,1]); ax.set_zlim(b[0,2], b[1,2])
+    ax.set_axis_off()
+    ax._dist = 6
+
+    frames = []
+    for azim in _np.linspace(0, -180, N_FRAMES):
+        a   = _np.radians(-azim)
+        rot = _np.array([[_np.cos(a), -_np.sin(a), 0],
+                          [_np.sin(a),  _np.cos(a), 0],
+                          [0, 0, 1]])
+        d      = _np.clip(normals @ (rot @ LIGHT), 0, 1)
+        shaded = _np.clip(fc * (AMBIENT + (1 - AMBIENT) * d[:, None]), 0, 1)
+        poly.set_facecolor(shaded)
+        ax.view_init(elev=20, azim=azim)
+        fig.canvas.draw()
+        buf = _np.frombuffer(fig.canvas.buffer_rgba(), dtype=_np.uint8)
+        buf = buf.reshape(fig.canvas.get_width_height()[::-1] + (4,))[:, :, :3]
+        frames.append(buf.copy())
+
+    _plt.close(fig)
+    # Freeze on last frame between models
+    for _ in range(PAUSE):
+        frames.append(frames[-1])
+    return frames
+
+
+def run_gif360_pipeline(task_id: str, user_id: int):
+    """Generate 360° rotation GIF cycling through all historical plaque models (oldest→newest)."""
+    try:
+        import trimesh as _trimesh, numpy as _np, imageio as _imageio
+        from scipy.spatial import KDTree as _KDTree
+        import matplotlib as _mpl
+        _mpl.use('Agg')
+        import matplotlib.pyplot as _plt
+        from mpl_toolkits.mplot3d.art3d import Poly3DCollection as _P3D
+
+        tasks[task_id]["step"] = "loading"
+        udir       = user_data_dir(user_id)
+        plaque_dir = udir / "plaque_output"
+
+        # Query DB for all completed plaque analyses, oldest first
+        db = next(get_db())
+        try:
+            analyses = db.query(Analysis).filter(
+                Analysis.user_id == user_id,
+                Analysis.type    == AnalysisType.plaque,
+                Analysis.status  == AnalysisStatus.done,
+            ).order_by(Analysis.created_at.asc()).all()
+        finally:
+            db.close()
+
+        # Collect model file paths in chronological order
+        # Prefer per-analysis OBJ; fall back to per-analysis GLB; skip generic plaque_by_fdi.*
+        model_paths = []
+        for a in analyses:
+            if not a.result_json:
+                continue
+            r        = json.loads(a.result_json)
+            glb_url  = r.get("glb_url", "")
+            glb_name = glb_url.split("/files/")[-1] if "/files/" in glb_url else ""
+            if not glb_name or glb_name == "plaque_by_fdi.glb":
+                continue
+            # Try matching OBJ with same stem (new naming: plaque_YYYYMMDD_id.obj)
+            obj_path = plaque_dir / (Path(glb_name).stem + ".obj")
+            glb_path = plaque_dir / glb_name
+            if obj_path.exists():
+                model_paths.append(obj_path)
+            elif glb_path.exists():
+                model_paths.append(glb_path)
+
+        if not model_paths:
+            # No per-analysis files → render only the latest OBJ
+            fallback = plaque_dir / "plaque_by_fdi.obj"
+            if not fallback.exists():
+                raise FileNotFoundError("未找到菌斑模型，請先執行菌斑分析")
+            model_paths = [fallback]
+
+        LIGHT   = _np.array([0.4, 0.6, 1.0]); LIGHT /= _np.linalg.norm(LIGHT)
+        AMBIENT = 0.35; BG = 'black'
+        total   = len(model_paths)
+
+        tasks[task_id]["step"] = "rendering"
+        all_frames = []
+        for i, model_path in enumerate(model_paths):
+            tasks[task_id]["step"] = f"rendering ({i+1}/{total})"
+            frames = _load_and_render_obj(
+                model_path, _trimesh, _np, _KDTree, _P3D, _plt,
+                LIGHT, AMBIENT, BG,
+            )
+            all_frames.extend(frames)
+
+        tasks[task_id]["step"] = "saving"
+        gif_path = udir / "plaque_output" / "teeth_360.gif"
+        _imageio.mimsave(str(gif_path), all_frames, fps=10, loop=0)
+        tasks[task_id].update({"status": "done", "step": "done",
+                                "gif_url": "/files/teeth_360.gif"})
+
+    except Exception as e:
+        tasks[task_id].update({"status": "failed", "error": str(e)})
+
+
+@app.post("/generate_360gif")
+async def generate_360gif(
+    background_tasks: BackgroundTasks,
+    user: User = Depends(get_current_user),
+):
+    task_id = str(uuid.uuid4())[:8]
+    tasks[task_id] = {"status": "queued", "step": "waiting", "type": "gif360"}
+    background_tasks.add_task(run_gif360_pipeline, task_id, user.id)
+    return {"task_id": task_id, "status": "queued"}
+
 
 @app.post("/generate_gif")
 async def generate_gif(request: Request):
