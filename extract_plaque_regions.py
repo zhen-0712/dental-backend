@@ -170,7 +170,24 @@ for view_name, cfg in VIEW_CONFIG.items():
         print(f"  ⚠️  找不到原始照片: {cfg['photo_file']}，跳過 ROI 過濾")
 
     if binary_roi is not None:
-        filtered_mask = cv2.bitwise_and(raw_mask, binary_roi)
+        # 建立一個全黑的畫布，用來存放過濾後的完整菌斑
+        filtered_mask = np.zeros_like(raw_mask)
+        
+        # 1. 找出 raw_mask (原始菌斑) 上所有的獨立區塊 (輪廓)
+        raw_contours, _ = cv2.findContours(raw_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        for cnt in raw_contours:
+            # 2. 為這個單獨的菌斑區塊建立暫存遮罩
+            temp_cnt_mask = np.zeros_like(raw_mask)
+            cv2.drawContours(temp_cnt_mask, [cnt], -1, 255, -1)
+            
+            # 3. 碰撞測試：檢查這塊菌斑有沒有「踩到」AI 認定的牙齒 (binary_roi)
+            overlap = cv2.bitwise_and(temp_cnt_mask, binary_roi)
+            
+            # 4. 如果重疊面積大於 5 個像素 (容錯值)，代表它是長在牙齒旁邊的，完整保留它！
+            if cv2.countNonZero(overlap) > 5:
+                cv2.drawContours(filtered_mask, [cnt], -1, 255, -1)
+                
         print(f"  過濾後菌斑像素: {(filtered_mask > 0).sum():,} ({(filtered_mask>0).sum()/img_h/img_w*100:.1f}%)")
     else:
         filtered_mask = raw_mask.copy()

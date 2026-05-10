@@ -15,68 +15,72 @@ import trimesh
 import json
 from pathlib import Path
 
+import os as _os_env
 import sys; sys.path.insert(0, "/home/Zhen/projects/SegmentAnyTooth")
 from user_env import get_paths, setup_user_dirs, BASE as _SAT_BASE
 _PATHS = get_paths()
 setup_user_dirs(_PATHS["user_dir"])
 BASE         = _PATHS["user_dir"]
 ROI_MASK_DIR = _PATHS["plaque_output"]
-MODEL_DIR    = _PATHS["model_dir"]
 OUTPUT_DIR   = _PATHS["plaque_output"]
 WEIGHT_DIR   = _SAT_BASE / "weight"
+
+_TEACHING    = _os_env.environ.get("TEACHING_MODEL", "0") == "1"
+MODEL_DIR    = _PATHS["model_dir_teaching"] if _TEACHING else _PATHS["model_dir"]
+_STEM        = "plaque_by_fdi_teaching" if _TEACHING else "plaque_by_fdi"
 
 UPPER_OBJ    = MODEL_DIR / "custom_upper_only.obj"
 LOWER_OBJ    = MODEL_DIR / "custom_lower_only.obj"
 UPPER_LABELS = MODEL_DIR / "upper_seg_labels.npy"
 LOWER_LABELS = MODEL_DIR / "lower_seg_labels.npy"
-MODEL_PATH   = MODEL_DIR / "custom_real_teeth.obj"
+MODEL_PATH   = MODEL_DIR / ("custom_real_teeth_teaching.obj" if _TEACHING else "custom_real_teeth.obj")
 
 COLOR_NORMAL = np.array([0.92, 0.86, 0.80])
 
 VIEW_CONFIG = {
     'front': {
         'sat_view': 'front', 'roi_mask': 'roi_mask_front.png',
-        'photo_file': 'real_teeth_processed/front.jpg',
+        'photo_file': 'real_teeth/front.jpg',
         'proj_u_axis': 0, 'proj_v_axis': 2,
         'flip_u': True,  'flip_v': True,
-        'scale_u': 1.0,  'scale_v': 0.55,
-        'offset_u': 0.0, 'offset_v': -1.05,
+        'scale_u': 0.95,  'scale_v': 1.1,
+        'offset_u': 0.0, 'offset_v': 0.1,
         'vert_clip_pct': 5,
     },
     'left_side': {
         'sat_view': 'left', 'roi_mask': 'roi_mask_left_side.png',
-        'photo_file': 'real_teeth_processed/left_side.jpg',
+        'photo_file': 'real_teeth/left_side.jpg',
         'proj_u_axis': 1, 'proj_v_axis': 2,
         'flip_u': False, 'flip_v': True,
-        'scale_u': 1.0,  'scale_v': 0.55,
-        'offset_u': -0.45, 'offset_v': -0.60,
+        'scale_u': 1.2,  'scale_v': 1.2,
+        'offset_u': 0.1, 'offset_v': -0.1,
         'vert_clip_pct': 5,
     },
     'right_side': {
         'sat_view': 'right', 'roi_mask': 'roi_mask_right_side.png',
-        'photo_file': 'real_teeth_processed/right_side.jpg',
+        'photo_file': 'real_teeth/right_side.jpg',
         'proj_u_axis': 1, 'proj_v_axis': 2,
         'flip_u': True,  'flip_v': True,
-        'scale_u': 1.0,  'scale_v': 0.55,
-        'offset_u': -0.45, 'offset_v': -0.20,
+        'scale_u': 1.1,  'scale_v': 1.1,
+        'offset_u': 0.1, 'offset_v': -0.1,
         'vert_clip_pct': 10,
     },
     'upper_occlusal': {
         'sat_view': 'upper', 'roi_mask': 'roi_mask_upper_occlusal.png',
-        'photo_file': 'real_teeth_processed/upper_occlusal.jpg',
+        'photo_file': 'real_teeth/upper_occlusal.jpg',
         'proj_u_axis': 0, 'proj_v_axis': 1,
         'flip_u': True,  'flip_v': True,
-        'scale_u': 1.6,  'scale_v': 1.15,
-        'offset_u': 0.0, 'offset_v': 0.0,
+        'scale_u': 1.0,  'scale_v': 1.0,
+        'offset_u': 0.0, 'offset_v': 0.15,
         'vert_clip_pct': 5,
     },
     'lower_occlusal': {
         'sat_view': 'lower', 'roi_mask': 'roi_mask_lower_occlusal.png',
-        'photo_file': 'real_teeth_processed/lower_occlusal.jpg',
+        'photo_file': 'real_teeth/lower_occlusal.jpg',
         'proj_u_axis': 0, 'proj_v_axis': 1,
         'flip_u': True,  'flip_v': False,
         'scale_u': 1.0,  'scale_v': 1.0,
-        'offset_u': 0.0, 'offset_v': 0.0,
+        'offset_u': 0.1, 'offset_v': 0.2,
         'vert_clip_pct': 5,
     },
 }
@@ -416,15 +420,15 @@ def export_mesh(path, verts, faces, colors):
                     vertex_colors=colors, process=False).export(str(path))
 
 
-ply = OUTPUT_DIR / "plaque_by_fdi.ply"
+ply = OUTPUT_DIR / f"{_STEM}.ply"
 export_mesh(ply, out_verts, out_faces, all_colors_u8)
 print(f"  ✅ PLY: {ply.name}  ({ply.stat().st_size/1024/1024:.1f} MB)")
 
-glb = OUTPUT_DIR / "plaque_by_fdi.glb"
+glb = OUTPUT_DIR / f"{_STEM}.glb"
 export_mesh(glb, out_verts, out_faces, all_colors_u8)
 print(f"  ✅ GLB: {glb.name}  ({glb.stat().st_size/1024/1024:.1f} MB)")
 
-obj = OUTPUT_DIR / "plaque_by_fdi.obj"
+obj = OUTPUT_DIR / f"{_STEM}.obj"
 with open(obj, 'w') as f:
     f.write("# plaque_by_fdi - vertex color OBJ\n\n")
     # ★ 一次性寫入（batch string 避免逐行 format）
@@ -454,7 +458,7 @@ stats = {
         for vn, vc in VIEW_CONFIG.items()
     }
 }
-json_out = OUTPUT_DIR / "plaque_by_fdi_stats.json"
+json_out = OUTPUT_DIR / f"{_STEM}_stats.json"
 with open(json_out, 'w', encoding='utf-8') as f:
     json.dump(stats, f, indent=2, ensure_ascii=False)
 print(f"  ✅ JSON: {json_out.name}")
