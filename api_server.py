@@ -131,7 +131,8 @@ def user_data_dir(user_id: int) -> Path:
     d = DATA_DIR / str(user_id)
     # 建立所有子目錄
     for sub in ["real_teeth", "real_teeth_processed", "real_teeth_analysis",
-                "personalized_3d_models_real", "teeth_color_test", "plaque_output"]:
+                "personalized_3d_models_real", "personalized_3d_models_real_teaching",
+                "teeth_color_test", "plaque_output"]:
         (d / sub).mkdir(parents=True, exist_ok=True)
     return d
 
@@ -238,6 +239,20 @@ def run_init_pipeline(task_id: str, analysis_id: int, user_id: int):
         tasks[task_id]["step"] = "creating_3d"
         ok, err = run_script("create_personalized_3d_real.py", udir)
         if not ok: raise Exception(f"create_3d failed:\n{err}")
+
+        tasks[task_id]["step"] = "creating_3d_teaching"
+        import os as _os
+        _env_teaching = _os.environ.copy()
+        _env_teaching["DENTAL_USER_DIR"] = str(udir)
+        _env_teaching["TEACHING_MODEL"]  = "1"
+        import subprocess as _sp
+        _res = _sp.run(
+            [PYTHON, str(BASE / "create_personalized_3d_real.py")],
+            capture_output=True, text=True, cwd=str(BASE),
+            timeout=600, env=_env_teaching
+        )
+        if _res.returncode != 0:
+            print(f"[WARNING] teaching model generation failed:\n{_res.stderr[-500:]}")
 
         umodel_dir = udir / "personalized_3d_models_real"
         model_ready = umodel_dir.exists() and (umodel_dir / "custom_upper_only.obj").exists()
@@ -763,11 +778,13 @@ def get_file(filename: str, token: str = None, user: User | None = Depends(get_c
             udir / "plaque_output",
             udir / "real_teeth_analysis",
             udir / "personalized_3d_models_real",
+            udir / "personalized_3d_models_real_teaching",
         ]
     search_dirs += [
         BASE / "plaque_output",
         BASE / "real_teeth_analysis",
         BASE / "personalized_3d_models_real",
+        BASE / "personalized_3d_models_real_teaching",
     ]
     for search_dir in search_dirs:
         path = search_dir / filename

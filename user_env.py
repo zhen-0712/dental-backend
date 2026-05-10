@@ -28,7 +28,8 @@ def get_paths(user_dir: Path = None) -> dict:
         "real_teeth":       user_dir / "real_teeth",
         "real_teeth_proc":  user_dir / "real_teeth_processed",
         "analysis":         user_dir / "real_teeth_analysis",
-        "model_dir":        user_dir / "personalized_3d_models_real",
+        "model_dir":          user_dir / "personalized_3d_models_real",
+        "model_dir_teaching": user_dir / "personalized_3d_models_real_teaching",
         "teeth_color_test": user_dir / "teeth_color_test",
         "plaque_output":    user_dir / "plaque_output",
         # 共用資源（不依 user）
