@@ -305,7 +305,7 @@ def run_init_pipeline(task_id: str, analysis_id: int, user_id: int):
 
 # ==================== 菌斑分析流程 ====================
 
-def run_plaque_pipeline(task_id: str, analysis_id: int, user_id: int):
+def run_plaque_pipeline(task_id: str, analysis_id: int, user_id: int, teaching: bool = False):
     db = next(get_db())
     analysis = db.query(Analysis).filter(Analysis.id == analysis_id).first() if analysis_id else None
     udir = user_data_dir(user_id) if user_id else BASE
@@ -327,11 +327,24 @@ def run_plaque_pipeline(task_id: str, analysis_id: int, user_id: int):
         if not ok: raise Exception(f"extract_plaque failed:\n{err}")
 
         tasks[task_id]["step"] = "projecting_plaque"
-        ok, err = run_script("project_plaque_by_fdi.py", udir)
-        if not ok: raise Exception(f"project_plaque failed:\n{err}")
+        if teaching:
+            import os as _os_pp, subprocess as _sp_pp
+            _env_pp = _os_pp.environ.copy()
+            _env_pp["DENTAL_USER_DIR"] = str(udir)
+            _env_pp["TEACHING_MODEL"]  = "1"
+            _res_pp = _sp_pp.run(
+                [PYTHON, str(BASE / "project_plaque_by_fdi.py")],
+                capture_output=True, text=True, cwd=str(BASE), timeout=600, env=_env_pp
+            )
+            if _res_pp.returncode != 0:
+                raise Exception(f"project_plaque failed:\n{_res_pp.stderr[-500:]}")
+        else:
+            ok, err = run_script("project_plaque_by_fdi.py", udir)
+            if not ok: raise Exception(f"project_plaque failed:\n{err}")
 
+        _stem = "plaque_by_fdi_teaching" if teaching else "plaque_by_fdi"
         stats = {}
-        stats_path = udir / "plaque_output" / "plaque_by_fdi_stats.json"
+        stats_path = udir / "plaque_output" / f"{_stem}_stats.json"
         if stats_path.exists():
             with open(stats_path) as f:
                 stats = json.load(f)
@@ -343,23 +356,25 @@ def run_plaque_pipeline(task_id: str, analysis_id: int, user_id: int):
             with open(tooth_path) as f2:
                 tooth_json = json.load(f2)
         # Save per-analysis copies of GLB and OBJ (date-stamped) for history timeline and 360° GIF
-        glb_src = udir / "plaque_output" / "plaque_by_fdi.glb"
-        obj_src = udir / "plaque_output" / "plaque_by_fdi.obj"
-        glb_fname = "plaque_by_fdi.glb"
+        glb_src  = udir / "plaque_output" / f"{_stem}.glb"
+        obj_src  = udir / "plaque_output" / f"{_stem}.obj"
+        glb_fname = f"{_stem}.glb"
         if analysis_id and glb_src.exists():
             import shutil
             date_str = now_taipei().strftime("%Y%m%d")
-            glb_fname = f"plaque_{date_str}_{analysis_id}.glb"
+            _tsuffix = "_t" if teaching else ""
+            glb_fname = f"plaque_{date_str}_{analysis_id}{_tsuffix}.glb"
             glb_copy = udir / "plaque_output" / glb_fname
             shutil.copy2(str(glb_src), str(glb_copy))
             if obj_src.exists():
-                obj_copy = udir / "plaque_output" / f"plaque_{date_str}_{analysis_id}.obj"
+                obj_copy = udir / "plaque_output" / f"plaque_{date_str}_{analysis_id}{_tsuffix}.obj"
                 shutil.copy2(str(obj_src), str(obj_copy))
         result = {
-            "glb_url":       f"/files/{glb_fname}",
-            "obj_url":       "/files/plaque_by_fdi.obj",
-            "stats":         stats,
+            "glb_url":        f"/files/{glb_fname}",
+            "obj_url":        f"/files/{_stem}.obj",
+            "stats":          stats,
             "tooth_analysis": tooth_json,
+            "teaching":       teaching,
         }
 
         if analysis:
@@ -442,6 +457,7 @@ async def analyze_plaque(
     upper_occlusal:   UploadFile = File(...),
     lower_occlusal:   UploadFile = File(...),
     mirror:           str = Form("0"),
+    teaching:         str = Form("0"),
     user: User | None = Depends(get_current_user_optional),
     db:   Session     = Depends(get_db),
 ):
@@ -461,9 +477,10 @@ async def analyze_plaque(
         analysis_id = analysis.id
 
     _uid = user.id if user else None
+    _teaching = teaching == "1"
     tasks[task_id] = {"status": "queued", "step": "waiting", "type": "plaque",
                       "analysis_id": analysis_id}
-    background_tasks.add_task(run_plaque_pipeline, task_id, analysis_id, _uid)
+    background_tasks.add_task(run_plaque_pipeline, task_id, analysis_id, _uid, _teaching)
     return {"task_id": task_id, "status": "queued", "type": "plaque"}
 
 
