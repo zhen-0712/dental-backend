@@ -94,8 +94,8 @@ except Exception as e:
 detected_teeth = set(analysis['detected_teeth'])
 
 if TEACHING_MODEL:
-    # 假牙教學模型：固定缺牙清單（18、28、31、38、47、48），縮放仍用 SegmentAnyTooth 測量值
-    never_detected = [18, 28, 31, 38, 47, 48]
+    # 假牙教學模型：固定缺牙清單（18、28、31、38、46、48），縮放仍用 SegmentAnyTooth 測量值
+    never_detected = [18, 28, 31, 38, 46, 48]
     print(f"\n📋 [假牙模型模式] 牙齒狀態:")
 else:
     never_detected = analysis.get('never_detected', [])

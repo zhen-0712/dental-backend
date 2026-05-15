@@ -387,11 +387,16 @@ all_colors_u8 = (np.concatenate([upper_colors, lower_colors], axis=0) * 255).ast
 # ==================== 輸出 ====================
 print(f"\n💾 輸出...")
 
-_analysis_path = _PATHS["analysis"] / "real_teeth_analysis.json"
-_never_detected = []
-if _analysis_path.exists():
-    import json as _json
-    _never_detected = _json.loads(_analysis_path.read_text()).get("never_detected", [])
+if _TEACHING:
+    # 假牙模式：固定缺牙清單，不讀 SAT 結果（避免把 SAT 誤判的 27 等也移除）
+    _never_detected = [18, 28, 31, 38, 46, 48]
+    print(f"  缺牙移除 [假牙模式]: {_never_detected}")
+else:
+    _analysis_path = _PATHS["analysis"] / "real_teeth_analysis.json"
+    _never_detected = []
+    if _analysis_path.exists():
+        import json as _json
+        _never_detected = _json.loads(_analysis_path.read_text()).get("never_detected", [])
     print(f"  缺牙移除: {_never_detected}")
 
 combined_raw    = trimesh.util.concatenate([upper_mesh, lower_mesh])
