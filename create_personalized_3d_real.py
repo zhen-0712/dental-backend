@@ -18,13 +18,20 @@ from scipy.spatial import KDTree
 from pathlib import Path
 from extract_control_points import get_tooth_control_points_3d
 
-import sys; sys.path.insert(0, "/home/Zhen/projects/SegmentAnyTooth")
+import os, sys; sys.path.insert(0, "/home/Zhen/projects/SegmentAnyTooth")
 from user_env import get_paths, setup_user_dirs
 _PATHS = get_paths()
 setup_user_dirs(_PATHS["user_dir"])
 ANALYSIS_DIR = _PATHS["analysis"]
 MODELS_DIR   = _PATHS["models"]
-OUTPUT_DIR   = _PATHS["model_dir"]
+
+# TEACHING_MODEL 模式：固定缺牙清單，輸出到獨立資料夾
+TEACHING_MODEL = os.environ.get("TEACHING_MODEL", "0") == "1"
+if TEACHING_MODEL:
+    OUTPUT_DIR = _PATHS["model_dir_teaching"]
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+else:
+    OUTPUT_DIR = _PATHS["model_dir"]
 
 # ==================== 配置（與原版完全相同）====================
 ENABLE_RATIO_ADJUSTMENT   = True
@@ -85,9 +92,15 @@ except Exception as e:
     print(f"  ❌ 載入失敗: {e}"); exit(1)
 
 detected_teeth = set(analysis['detected_teeth'])
-never_detected = analysis.get('never_detected', [])
 
-print(f"\n📋 牙齒狀態:")
+if TEACHING_MODEL:
+    # 假牙教學模型：固定缺牙清單（18、28、31、38、47、48），縮放仍用 SegmentAnyTooth 測量值
+    never_detected = [18, 28, 31, 38, 47, 48]
+    print(f"\n📋 [假牙模型模式] 牙齒狀態:")
+else:
+    never_detected = analysis.get('never_detected', [])
+    print(f"\n📋 牙齒狀態:")
+
 print(f"  檢測到: {len(detected_teeth)} 顆 → {sorted(detected_teeth)}")
 print(f"  從未出現: {len(never_detected)} 顆 → {never_detected}")
 
@@ -363,62 +376,45 @@ def apply_customized_scaling(mesh, seg_labels, tooth_scales):
 
 def normalize_anterior_incisal_height(mesh, seg_labels, analysis_data, teeth_list):
     print("\n📐 前牙切緣高度正規化...")
-    NORMALIZE_TEETH = {11, 12, 21, 22, 31, 32, 41, 42}
-    BLEND = 0.25
-    vertices = mesh.vertices.copy()
-    tooth_info = {}
+    # BLEND=0.0: 停用照片量測高度拉伸（教學模型為 2x 實際尺寸，量測值過大會大幅拉長牙齒）
+    BLEND = 0.0
+    # 所有前牙（切牙+犬牙）按 CEJ 縮短牙冠
+    SHORTEN_TEETH = {11, 12, 13, 21, 22, 23, 31, 32, 33, 41, 42, 43}
+    SHORTEN_RATIO = 0.75  # 牙冠縮短至 75%（was 0.85 僅限 {11,21}）
 
+    vertices = mesh.vertices.copy()
+
+    # 收集 tooth_info（供 debug 列印用）
+    tooth_info: dict = {}
     for tooth_id in teeth_list:
-        if tooth_id not in NORMALIZE_TEETH: continue
         indices = np.nonzero(seg_labels == tooth_id)[0]
         if len(indices) == 0: continue
         tooth_verts = vertices[indices]
         z_top = float(tooth_verts[:, 2].max())
         z_bot = float(tooth_verts[:, 2].min())
         tooth_id_str = str(tooth_id)
-        if tooth_id_str not in analysis_data['teeth']: continue
-        dims = analysis_data['teeth'][tooth_id_str].get('dimensions_3d', {})
+        dims = analysis_data.get('teeth', {}).get(tooth_id_str, {}).get('dimensions_3d', {})
         measured_h = dims.get('height', {}).get('mean')
-        if measured_h is None or measured_h <= 0: continue
         tooth_info[tooth_id] = {
             'indices': indices, 'z_top': z_top, 'z_bot': z_bot,
             'current_h': z_top - z_bot, 'measured_h': measured_h,
         }
 
-    if not tooth_info:
-        print("  ⚠ 無有效前牙資料，跳過")
-        result = mesh.copy(); result.vertices = vertices; return result
+    if tooth_info:
+        sample_id = list(tooth_info.keys())[0]
+        d = tooth_info[sample_id]
+        print(f"  [DEBUG] #{sample_id}: current_h={d['current_h']:.1f}  measured_h={d.get('measured_h')}")
+    print(f"  ✓ BLEND={BLEND}（已停用量測高度拉伸）")
 
-    corrected = 0
-    for tooth_id, d in tooth_info.items():
-        indices   = d['indices']
-        z_top     = d['z_top']; z_bot = d['z_bot']
-        z_shift   = (z_bot + d['measured_h'] - z_top) * BLEND
-        if abs(z_shift) < 0.1: continue
-
-        tooth_verts  = vertices[indices]
-        z_range      = z_top - z_bot + 1e-6
-        blend_weight = np.clip((tooth_verts[:, 2] - z_bot) / z_range, 0, 1) ** 0.5
-        vertices[indices, 2] += z_shift * blend_weight
-        corrected += 1
-        print(f"    #{tooth_id}: 測量高{d['measured_h']:.1f}mm  切緣偏移{z_shift:+.2f}mm")
-
-    sample_id = list(tooth_info.keys())[0]
-    d = tooth_info[sample_id]
-    print(f"  [DEBUG] #{sample_id}: z_bot={d['z_bot']:.1f}  z_top={d['z_top']:.1f}"
-          f"  current_h={d['current_h']:.1f}  measured_h={d['measured_h']:.1f}")
-    print(f"  ✓ 切緣高度正規化: {corrected} 顆")
-
+    # CEJ 縮短：針對所有前牙，不依賴 tooth_info 是否有量測資料
     result = mesh.copy()
-    SHORTEN_TEETH = {11, 21}
-    SHORTEN_RATIO = 0.85
-
     for tooth_id in SHORTEN_TEETH:
-        if tooth_id not in tooth_info: continue
-        indices     = tooth_info[tooth_id]['indices']
+        indices = np.nonzero(seg_labels == tooth_id)[0]
+        if len(indices) == 0: continue
         tooth_verts = vertices[indices]
         z_vals      = tooth_verts[:, 2]
-        z_min, z_max = z_vals.min(), z_vals.max()
+        z_min, z_max = float(z_vals.min()), float(z_vals.max())
+        if z_max - z_min < 0.5: continue
 
         n_bins    = 20
         bin_edges = np.linspace(z_min, z_max, n_bins + 1)
@@ -427,19 +423,18 @@ def normalize_anterior_incisal_height(mesh, seg_labels, analysis_data, teeth_lis
             layer_mask = (z_vals >= bin_edges[i]) & (z_vals < bin_edges[i+1])
             if layer_mask.sum() < 3:
                 widths.append(np.inf); continue
-            layer_verts = tooth_verts[layer_mask]
-            widths.append(layer_verts[:, 0].max() - layer_verts[:, 0].min())
+            lv = tooth_verts[layer_mask]
+            widths.append(float(lv[:, 0].max() - lv[:, 0].min()))
 
-        widths     = np.array(widths)
-        cej_bin    = np.argmin(widths[:n_bins // 2])
-        z_cej      = bin_edges[cej_bin + 1]
-        print(f"    #{tooth_id}: CEJ估算z={z_cej:.1f} (z_top={z_max:.1f})")
+        widths  = np.array(widths)
+        cej_bin = int(np.argmin(widths[:n_bins // 2]))
+        z_cej   = bin_edges[cej_bin + 1]
 
         crown_mask = tooth_verts[:, 2] > z_cej
         if crown_mask.sum() == 0: continue
         rel_z = tooth_verts[crown_mask, 2] - z_cej
         vertices[indices[crown_mask], 2] = z_cej + rel_z * SHORTEN_RATIO
-        print(f"    #{tooth_id}: 牙冠縮短至 {SHORTEN_RATIO*100:.0f}%")
+        print(f"    #{tooth_id}: 牙冠縮短至 {SHORTEN_RATIO*100:.0f}%  (CEJ z={z_cej:.1f})")
 
     result.vertices = vertices
     return result
@@ -749,7 +744,8 @@ lower_mesh_final.remove_degenerate_faces(); lower_mesh_final.remove_duplicate_fa
 lower_mesh_final.fix_normals()
 
 full_mesh   = trimesh.util.concatenate([upper_mesh_final, lower_mesh_final])
-output_file = OUTPUT_DIR / "custom_real_teeth.obj"
+_MODEL_STEM = "custom_real_teeth_teaching" if TEACHING_MODEL else "custom_real_teeth"
+output_file = OUTPUT_DIR / f"{_MODEL_STEM}.obj"
 full_mesh.export(str(output_file))
 print(f"  ✓ 已保存: {output_file.name}")
 
@@ -801,6 +797,6 @@ assert len(upper_mesh_final.vertices) == len(upper_seg_labels_out), f"上顎頂�
 assert len(lower_mesh_final.vertices) == len(lower_seg_labels_out), f"下顎頂點數不符: {len(lower_mesh_final.vertices)} vs {len(lower_seg_labels_out)}"
 print(f"  ✅ 頂點數量與 seg_labels 一致驗證通過")
 
-glb_path = OUTPUT_DIR / "custom_real_teeth.glb"
+glb_path = OUTPUT_DIR / f"{_MODEL_STEM}.glb"
 full_mesh.export(str(glb_path))
 print(f"  ✓ GLB 網頁展示版: {glb_path.name}")

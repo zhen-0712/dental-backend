@@ -195,6 +195,9 @@ def _measure_teeth_in_mask(mask, unique_teeth, view):
         contour = max(contours, key=cv2.contourArea)
         area_px = cv2.contourArea(contour)
 
+        if area_px < 100:
+            continue
+
         if len(contour) >= 5:
             ellipse     = cv2.fitEllipse(contour)
             _, ellipse_axes, ellipse_angle = ellipse
@@ -388,7 +391,7 @@ def merge_multiview_detections(all_measurements):
 
         if position == 'wisdom':
             avg_solidity = np.mean([m.get('solidity', 0) for m in measurements_list])
-            if avg_solidity < 0.80:
+            if avg_solidity < 0.60:
                 continue
 
         confidence = calculate_confidence_score(tooth_data, position)
