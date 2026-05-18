@@ -503,65 +503,6 @@ def identify_suspicious_detections(merged_data):
     return suspicious
 
 
-# ==================== 缺牙對稱分析 ====================
-
-WISDOM_TEETH = {18, 28, 38, 48}
-
-def analyze_missing_teeth(never_detected_set, merged):
-    """
-    將從未被偵測到的牙齒分成兩類：
-    - probably_missing   : 有強力證據確實缺牙（對稱牙也沒偵測到、智齒、鏡像牙可信度低）
-    - possibly_missed    : 可能存在但 SAT 漏偵測（鏡像牙偵測良好，代表此側也應有牙）
-
-    possibly_missed 的牙會被移出 never_detected，加入 low_confidence，
-    讓前端顯示為「存在但不確定」而非「缺牙」。
-    """
-    probably_missing = []
-    possibly_missed  = []
-    detail           = {}
-
-    for tooth_id in sorted(never_detected_set):
-        mirror_id = SYMMETRIC_PAIRS.get(tooth_id)
-
-        # 智齒：不論鏡像狀況，預設為真缺牙
-        if tooth_id in WISDOM_TEETH:
-            probably_missing.append(tooth_id)
-            detail[tooth_id] = {'verdict': 'probably_missing', 'reason': 'wisdom_tooth'}
-            continue
-
-        mirror_in_merged = (mirror_id is not None) and (mirror_id in merged)
-
-        if mirror_in_merged:
-            m_conf    = merged[mirror_id].get('confidence', 0)
-            m_warning = merged[mirror_id].get('warning')
-            m_views   = merged[mirror_id].get('num_views', 0)
-            # 鏡像牙偵測良好 → 本牙可能也存在，只是 SAT 漏偵測
-            if m_conf >= 0.55 and m_warning is None and m_views >= 2:
-                possibly_missed.append(tooth_id)
-                detail[tooth_id] = {
-                    'verdict': 'possibly_missed_by_sat',
-                    'reason':  f'mirror_{mirror_id}_conf_{m_conf:.2f}_views_{m_views}',
-                    'mirror_id': mirror_id, 'mirror_confidence': round(m_conf, 3),
-                }
-            else:
-                probably_missing.append(tooth_id)
-                detail[tooth_id] = {
-                    'verdict': 'probably_missing',
-                    'reason':  f'mirror_{mirror_id}_weak_conf_{m_conf:.2f}',
-                    'mirror_id': mirror_id, 'mirror_confidence': round(m_conf, 3),
-                }
-        else:
-            # 鏡像牙也沒偵測到 → 對稱性缺牙，判定為真缺牙
-            probably_missing.append(tooth_id)
-            detail[tooth_id] = {
-                'verdict': 'probably_missing',
-                'reason':  'mirror_also_not_detected',
-                'mirror_id': mirror_id,
-            }
-
-    return probably_missing, possibly_missed, detail
-
-
 # ==================== 主流程 ====================
 
 def main():
@@ -607,22 +548,10 @@ def main():
     reliable     = [t for t, d in merged.items() if d.get('warning') is None]
     questionable = [t for t, d in merged.items() if d.get('warning') is not None]
 
-    all_model_teeth  = (set(range(11, 19)) | set(range(21, 29)) |
-                        set(range(31, 39)) | set(range(41, 49)))
-    detected_teeth   = set(merged.keys())
-    never_detected_raw = all_model_teeth - detected_teeth
-
-    # ── 對稱性缺牙分析 ──
-    probably_missing, possibly_missed, missing_detail = analyze_missing_teeth(
-        never_detected_raw, merged
-    )
-
-    # possibly_missed 移入 low_confidence（前端顯示為「存在但不確定」）
-    if possibly_missed:
-        suspicious['low_confidence'] = sorted(
-            set(suspicious['low_confidence']) | set(possibly_missed)
-        )
-        detected_teeth = detected_teeth | set(possibly_missed)
+    all_model_teeth = (set(range(11, 19)) | set(range(21, 29)) |
+                       set(range(31, 39)) | set(range(41, 49)))
+    detected_teeth  = set(merged.keys())
+    never_detected  = sorted(all_model_teeth - detected_teeth)
 
     print(f"\n📊 檢測統計：")
     print(f"  總計: {total_detected} 顆  可靠: {len(reliable)} 顆  可疑: {len(questionable)} 顆")
@@ -634,9 +563,9 @@ def main():
     if suspicious['might_be_false']:
         print(f"\n  ⚠️  可能誤檢: {sorted(suspicious['might_be_false'])}")
 
-    print(f"\n📭 確認缺牙: {len(probably_missing)} 顆  {sorted(probably_missing)}")
-    if possibly_missed:
-        print(f"  SAT 可能漏偵測（鏡像牙存在）: {sorted(possibly_missed)}")
+    print(f"\n📭 從未出現的牙齒: {len(never_detected)} 顆")
+    if never_detected:
+        print(f"  {never_detected}")
 
     result = {
         'total_detected':     total_detected,
@@ -647,11 +576,9 @@ def main():
         'teeth':        merged,
         'by_view':      all_detected_by_view,
         'measurement_definition': MEASUREMENT_DEFINITION,
-        'never_detected':        sorted(probably_missing),
-        'possibly_missed_by_sat': sorted(possibly_missed),
-        'missing_analysis':      missing_detail,
-        'detected_teeth':        sorted(detected_teeth),
-        'view_photo_totals':     view_photo_totals,
+        'never_detected':    never_detected,
+        'detected_teeth':    sorted(detected_teeth),
+        'view_photo_totals': view_photo_totals,
     }
 
     result_file = OUTPUT_DIR / "real_teeth_analysis.json"
