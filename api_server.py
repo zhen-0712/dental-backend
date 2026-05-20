@@ -228,13 +228,9 @@ def run_init_pipeline(task_id: str, analysis_id: int, user_id: int):
             analysis.status = AnalysisStatus.running
             db.commit()
 
-        tasks[task_id]["step"] = "preprocessing"
-        ok, err = run_script("preprocess_photos.py", udir)
-        if not ok: raise Exception(f"preprocess failed:\n{err}")
-
-        tasks[task_id]["step"] = "analyzing"
-        ok, err = run_script("analyze_real_teeth.py", udir)
-        if not ok: raise Exception(f"analyze failed:\n{err}")
+        tasks[task_id]["step"] = "preprocessing+analyzing"
+        ok, err = run_script("run_preprocess_analyze.py", udir)
+        if not ok: raise Exception(f"preprocess+analyze failed:\n{err}")
 
         # ── 一般模型 + 假牙模型同時並行生成（兩者寫入不同目錄，完全獨立）──
         tasks[task_id]["step"] = "creating_3d"

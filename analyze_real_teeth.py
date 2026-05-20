@@ -569,7 +569,7 @@ def identify_suspicious_detections(merged_data):
 
 # ==================== 主流程 ====================
 
-def main():
+def main(sam_model=None, yolo_models=None):
     print(f"\n{'='*70}")
     print(f"📂 處理 real_teeth 資料夾")
     print(f"{'='*70}\n")
@@ -578,8 +578,9 @@ def main():
     all_detected_by_view = {}
     view_photo_totals    = {}   # {view_short: 總張數}
 
-    # 預載模型（載入一次，所有照片共用）
-    sam_model, yolo_models = _preload_models()
+    # 預載模型（若外部已傳入則直接使用，否則自行載入）
+    if sam_model is None or yolo_models is None:
+        sam_model, yolo_models = _preload_models()
 
     # ── 單張模式：front.jpg, left_side.jpg … ──
     for photo_name, view in VIEW_MAPPING.items():
