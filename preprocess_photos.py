@@ -7,6 +7,8 @@
 
 import cv2
 import numpy as np
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
 import sys; sys.path.insert(0, "/home/Zhen/projects/SegmentAnyTooth")
 from user_env import get_paths, setup_user_dirs, get_user_dir
@@ -252,30 +254,36 @@ for view in _VIEWS:
         else:
             break  # 每個 view 以第一個缺口為止
 
-count = 0
-for photo_name, light_type in files_to_process.items():
-    input_path = INPUT_DIR / photo_name
-    print(f"\n{'─'*50}")
-    print(f"  📷 {photo_name}  [{light_type}]")
+_print_lock = threading.Lock()
 
+def _process_one(photo_name: str, light_type: str) -> bool:
+    input_path = INPUT_DIR / photo_name
     img = cv2.imread(str(input_path))
     if img is None:
-        print(f"  ❌ 無法讀取")
-        continue
-
+        with _print_lock:
+            print(f"  ❌ {photo_name} 無法讀取")
+        return False
     h, w = img.shape[:2]
-    print(f"     原始尺寸: {w}x{h}")
-
-    processor = PROCESSORS[light_type]
-    result = processor(img)
-    final = pad_to_square(result, target=512)
-
+    result = PROCESSORS[light_type](img)
+    final  = pad_to_square(result, target=512)
     out_path = (OUTPUT_DIR / photo_name).with_suffix('.jpg')
     cv2.imwrite(str(out_path), final)
-    print(f"  ✅ 輸出: {out_path.name} (512x512)")
-    count += 1
+    with _print_lock:
+        print(f"  ✅ {out_path.name} ({w}x{h} → 512x512)")
+    return True
+
+MAX_WORKERS = min(4, len(files_to_process)) if files_to_process else 1
+count = 0
+with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+    futures = {
+        executor.submit(_process_one, name, lt): name
+        for name, lt in files_to_process.items()
+    }
+    for fut in as_completed(futures):
+        if fut.result():
+            count += 1
 
 print(f"\n{'='*60}")
-print(f"✅ 完成！共 {count} 張")
+print(f"✅ 完成！共 {count} 張（最多 {MAX_WORKERS} 張並行）")
 print(f"{'='*60}")
 print(f"\n💡 下一步: python analyze_real_teeth.py")
