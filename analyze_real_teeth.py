@@ -20,6 +20,8 @@ import cv2
 import numpy as np
 from pathlib import Path
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import sys; sys.path.insert(0, "/home/Zhen/projects/SegmentAnyTooth")
 from user_env import get_paths, setup_user_dirs
@@ -324,8 +326,9 @@ def _predict_cached(image_path: str, view: str, sam_model, yolo_models: dict) ->
     return predict_mask
 
 
+_print_lock = threading.Lock()
+
 def analyze_single_photo(image_path, view, sam_model=None, yolo_models=None):
-    print(f"  📸 {image_path.name} ({view})", end="")
     if sam_model is not None and yolo_models is not None:
         mask = _predict_cached(str(image_path), view, sam_model, yolo_models)
     else:
@@ -336,7 +339,8 @@ def analyze_single_photo(image_path, view, sam_model=None, yolo_models=None):
     unique_teeth  = np.unique(mask)
     unique_teeth  = unique_teeth[unique_teeth > 0]
     detected_list = sorted([int(t) for t in unique_teeth])
-    print(f" → {len(detected_list)} 顆")
+    with _print_lock:
+        print(f"  📸 {image_path.name} ({view}) → {len(detected_list)} 顆")
     tooth_measurements = _measure_teeth_in_mask(mask, unique_teeth, view)
     return mask, tooth_measurements, detected_list
 
@@ -582,33 +586,41 @@ def main(sam_model=None, yolo_models=None):
     if sam_model is None or yolo_models is None:
         sam_model, yolo_models = _preload_models()
 
-    # ── 單張模式：front.jpg, left_side.jpg … ──
+    # ── 收集所有需要分析的照片 ──
+    # work_items: (photo_path, view_short, photo_name, base_key)
+    work_items = []
     for photo_name, view in VIEW_MAPPING.items():
         photo_path = REAL_TEETH_DIR / photo_name
-        if not photo_path.exists():
-            continue
-        mask, measurements, detected_list = analyze_single_photo(
-            photo_path, view, sam_model, yolo_models)
-        all_measurements[photo_name]     = measurements
-        all_detected_by_view[photo_name] = detected_list
-        view_photo_totals[view] = view_photo_totals.get(view, 0) + 1
-
-    # ── 多張模式：front_0.jpg, front_1.jpg, upper_occlusal_0.jpg … ──
-    # 每個 view 可以有多張，自動掃描直到第一個缺口
+        if photo_path.exists():
+            work_items.append((photo_path, view, photo_name, photo_name))
     for view_name in _MULTI_VIEW_NAMES:
         view_short = _MULTI_VIEW_SHORT[view_name]
+        base_key   = f"{view_name}.jpg"
         for i in range(50):
             photo_name = f"{view_name}_{i}.jpg"
             photo_path = REAL_TEETH_DIR / photo_name
             if not photo_path.exists():
                 break
-            mask, measurements, detected_list = analyze_single_photo(
-                photo_path, view_short, sam_model, yolo_models)
+            work_items.append((photo_path, view_short, photo_name, base_key))
+
+    # ── 並行 inference（SAM 使用 vit_tiny + ViT/LayerNorm，無可變 batch 統計，可並發）──
+    n_workers = min(4, len(work_items)) if work_items else 1
+    print(f"🔄 並行分析 {len(work_items)} 張照片（{n_workers} 個執行緒）...")
+
+    def _do_analyze(item):
+        photo_path, view, photo_name, base_key = item
+        _, measurements, detected_list = analyze_single_photo(
+            photo_path, view, sam_model, yolo_models)
+        return photo_name, base_key, view, measurements, detected_list
+
+    with ThreadPoolExecutor(max_workers=n_workers) as pool:
+        futures = [pool.submit(_do_analyze, item) for item in work_items]
+        for fut in as_completed(futures):
+            photo_name, base_key, view, measurements, detected_list = fut.result()
             all_measurements[photo_name] = measurements
-            base_key = f"{view_name}.jpg"
             prev = set(all_detected_by_view.get(base_key, []))
             all_detected_by_view[base_key] = sorted(prev | set(detected_list))
-            view_photo_totals[view_short] = view_photo_totals.get(view_short, 0) + 1
+            view_photo_totals[view] = view_photo_totals.get(view, 0) + 1
 
     merged     = merge_multiview_detections(all_measurements, view_photo_totals)
     classified = classify_by_position(merged)

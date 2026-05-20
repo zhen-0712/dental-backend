@@ -105,9 +105,12 @@ else:
 print(f"  檢測到: {len(detected_teeth)} 顆 → {sorted(detected_teeth)}")
 print(f"  從未出現: {len(never_detected)} 顆 → {never_detected}")
 
-print("\n📦 載入公版模型...")
-upper_mesh = trimesh.load(str(MODELS_DIR / "1MWJLE4X_upper.obj"))
-lower_mesh = trimesh.load(str(MODELS_DIR / "01J9K9S6_lower.obj"))
+print("\n📦 載入公版模型（並行）...")
+with _TPE(max_workers=2) as _lp:
+    _fu = _lp.submit(trimesh.load, str(MODELS_DIR / "1MWJLE4X_upper.obj"))
+    _fl = _lp.submit(trimesh.load, str(MODELS_DIR / "01J9K9S6_lower.obj"))
+    upper_mesh = _fu.result()
+    lower_mesh = _fl.result()
 
 with open(MODELS_DIR / "1MWJLE4X_upper.json") as f:
     upper_seg_data   = json.load(f)
