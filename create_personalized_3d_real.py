@@ -16,6 +16,7 @@ import numpy as np
 import trimesh
 from scipy.spatial import KDTree
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor as _TPE
 from extract_control_points import get_tooth_control_points_3d
 
 import os, sys; sys.path.insert(0, "/home/Zhen/projects/SegmentAnyTooth")
@@ -736,17 +737,29 @@ upper_v, upper_f, upper_used = remove_teeth_from_mesh(
 lower_v, lower_f, lower_used = remove_teeth_from_mesh(
     scaled_lower_custom.vertices, scaled_lower_custom.faces, lower_seg_labels, lower_to_remove)
 
-upper_mesh_final = trimesh.Trimesh(vertices=upper_v, faces=upper_f, process=True)
+upper_mesh_final = trimesh.Trimesh(vertices=upper_v, faces=upper_f, process=False)
 upper_mesh_final.remove_degenerate_faces(); upper_mesh_final.remove_duplicate_faces()
 upper_mesh_final.fix_normals()
-lower_mesh_final = trimesh.Trimesh(vertices=lower_v, faces=lower_f, process=True)
+lower_mesh_final = trimesh.Trimesh(vertices=lower_v, faces=lower_f, process=False)
 lower_mesh_final.remove_degenerate_faces(); lower_mesh_final.remove_duplicate_faces()
 lower_mesh_final.fix_normals()
 
 full_mesh   = trimesh.util.concatenate([upper_mesh_final, lower_mesh_final])
 _MODEL_STEM = "custom_real_teeth_teaching" if TEACHING_MODEL else "custom_real_teeth"
-output_file = OUTPUT_DIR / f"{_MODEL_STEM}.obj"
-full_mesh.export(str(output_file))
+output_file     = OUTPUT_DIR / f"{_MODEL_STEM}.obj"
+upper_only_path = OUTPUT_DIR / "custom_upper_only.obj"
+lower_only_path = OUTPUT_DIR / "custom_lower_only.obj"
+glb_path        = OUTPUT_DIR / f"{_MODEL_STEM}.glb"
+
+print("💾 並行匯出 4 個模型檔案中...")
+with _TPE(max_workers=4) as _ep:
+    _f1 = _ep.submit(full_mesh.export,        str(output_file))
+    _f2 = _ep.submit(upper_mesh_final.export, str(upper_only_path))
+    _f3 = _ep.submit(lower_mesh_final.export, str(lower_only_path))
+    _f4 = _ep.submit(full_mesh.export,        str(glb_path))
+    for _f in (_f1, _f2, _f3, _f4):
+        _f.result()
+
 print(f"  ✓ 已保存: {output_file.name}")
 
 overall_scale_upper = upper_scales[list(upper_scales.keys())[0]]['overall_scale'] if upper_scales else 1.0
@@ -779,10 +792,6 @@ print(f"  客製化調整: {sum(1 for s in all_tooth_scales.values() if s.get('h
 print(f"  整體縮放: 上顎 {overall_scale_upper:.3f}x, 下顎 {overall_scale_lower:.3f}x")
 
 print("\n💾 [NEW] 輸出分離客製化模型 + seg_labels...")
-upper_only_path = OUTPUT_DIR / "custom_upper_only.obj"
-lower_only_path = OUTPUT_DIR / "custom_lower_only.obj"
-upper_mesh_final.export(str(upper_only_path))
-lower_mesh_final.export(str(lower_only_path))
 print(f"  ✓ 上顎: {upper_only_path.name}  ({len(upper_mesh_final.vertices):,} 頂點)")
 print(f"  ✓ 下顎: {lower_only_path.name}  ({len(lower_mesh_final.vertices):,} 頂點)")
 
@@ -797,6 +806,4 @@ assert len(upper_mesh_final.vertices) == len(upper_seg_labels_out), f"上顎頂�
 assert len(lower_mesh_final.vertices) == len(lower_seg_labels_out), f"下顎頂點數不符: {len(lower_mesh_final.vertices)} vs {len(lower_seg_labels_out)}"
 print(f"  ✅ 頂點數量與 seg_labels 一致驗證通過")
 
-glb_path = OUTPUT_DIR / f"{_MODEL_STEM}.glb"
-full_mesh.export(str(glb_path))
 print(f"  ✓ GLB 網頁展示版: {glb_path.name}")
