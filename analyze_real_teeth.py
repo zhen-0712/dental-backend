@@ -13,7 +13,9 @@
   3. 主流程: all_detected_by_view 在 analyze_single_photo 裡一次回傳，不拆分
 """
 
-from segmentanytooth import predict
+from segmentanytooth import predict, get_model_path, LEFT_CLASSES
+from sam import sam_load, sam_predict
+from ultralytics import YOLO
 import cv2
 import numpy as np
 from pathlib import Path
@@ -21,6 +23,7 @@ import json
 
 import sys; sys.path.insert(0, "/home/Zhen/projects/SegmentAnyTooth")
 from user_env import get_paths, setup_user_dirs
+from utils import suppress_stdout
 _PATHS = get_paths()
 setup_user_dirs(_PATHS["user_dir"])
 BASE_DIR = _PATHS["user_dir"]
@@ -263,12 +266,73 @@ def _measure_teeth_in_mask(mask, unique_teeth, view):
     return tooth_measurements
 
 
-def analyze_single_photo(image_path, view):
+def _preload_models():
+    """預載 SAM + 所有視角 YOLO 模型，避免每張照片重複從磁碟載入。"""
+    weight_dir = str(WEIGHT_DIR)
+    print("🔧 預載入 SAM + YOLO 模型中（只需一次）...")
+    with suppress_stdout():
+        sam = sam_load(get_model_path("sam", weight_dir))
+        yolo_models = {
+            view: YOLO(model=get_model_path(view, weight_dir))
+            for view in ['front', 'right', 'upper', 'lower']
+        }
+    print("✅ 模型預載完成")
+    return sam, yolo_models
+
+
+def _predict_cached(image_path: str, view: str, sam_model, yolo_models: dict) -> np.ndarray:
+    """使用預載模型執行 SAT 推論，邏輯與 segmentanytooth.predict() 完全一致。"""
+    should_flip = view == "left"
+    yolo_key    = "right" if view == "left" else view
+
+    image = cv2.imread(image_path)
+    if should_flip:
+        image = cv2.flip(image, 1)
+
+    with suppress_stdout():
+        r = yolo_models[yolo_key].predict(
+            image, save=False, save_txt=False,
+            save_conf=False, save_crop=False, project=None,
+        )[0]
+
+    if r.boxes is None or len(r.boxes) == 0:
+        return np.zeros(image.shape[:2], dtype=np.uint8)
+
+    names = r.names if not should_flip else LEFT_CLASSES
+    boxes = r.boxes.xyxy.cpu().numpy()
+    clss  = r.boxes.cls.cpu().numpy().astype(np.int32)
+    if boxes.ndim == 1: boxes = boxes[np.newaxis, :]
+    if clss.ndim == 0:  clss  = clss[np.newaxis]
+
+    sort_ids = np.argsort(clss)
+    clss, boxes = clss[sort_ids], boxes[sort_ids]
+
+    if should_flip:
+        image_width = image.shape[1]
+        image = cv2.flip(image, 1)
+        flipped = boxes.copy()
+        flipped[:, [0, 2]] = image_width - flipped[:, [2, 0]]
+        boxes = flipped
+
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    sam_masks = sam_predict(sam=sam_model, boxes_xyxy=boxes, image=image, batch_size=10)
+
+    predict_mask = np.zeros(image.shape[:2], dtype=np.uint8)
+    for cls_id, current_mask in zip(clss, sam_masks):
+        fdi_tooth_name = int(names[cls_id][-2:])
+        predict_mask[current_mask == 1] = fdi_tooth_name
+    return predict_mask
+
+
+def analyze_single_photo(image_path, view, sam_model=None, yolo_models=None):
     print(f"  📸 {image_path.name} ({view})", end="")
-    mask = predict(
-        image_path=str(image_path), view=view,
-        weight_dir=str(WEIGHT_DIR), sam_batch_size=10
-    )
+    if sam_model is not None and yolo_models is not None:
+        mask = _predict_cached(str(image_path), view, sam_model, yolo_models)
+    else:
+        mask = predict(
+            image_path=str(image_path), view=view,
+            weight_dir=str(WEIGHT_DIR), sam_batch_size=10
+        )
     unique_teeth  = np.unique(mask)
     unique_teeth  = unique_teeth[unique_teeth > 0]
     detected_list = sorted([int(t) for t in unique_teeth])
@@ -514,12 +578,16 @@ def main():
     all_detected_by_view = {}
     view_photo_totals    = {}   # {view_short: 總張數}
 
+    # 預載模型（載入一次，所有照片共用）
+    sam_model, yolo_models = _preload_models()
+
     # ── 單張模式：front.jpg, left_side.jpg … ──
     for photo_name, view in VIEW_MAPPING.items():
         photo_path = REAL_TEETH_DIR / photo_name
         if not photo_path.exists():
             continue
-        mask, measurements, detected_list = analyze_single_photo(photo_path, view)
+        mask, measurements, detected_list = analyze_single_photo(
+            photo_path, view, sam_model, yolo_models)
         all_measurements[photo_name]     = measurements
         all_detected_by_view[photo_name] = detected_list
         view_photo_totals[view] = view_photo_totals.get(view, 0) + 1
@@ -533,7 +601,8 @@ def main():
             photo_path = REAL_TEETH_DIR / photo_name
             if not photo_path.exists():
                 break
-            mask, measurements, detected_list = analyze_single_photo(photo_path, view_short)
+            mask, measurements, detected_list = analyze_single_photo(
+                photo_path, view_short, sam_model, yolo_models)
             all_measurements[photo_name] = measurements
             base_key = f"{view_name}.jpg"
             prev = set(all_detected_by_view.get(base_key, []))
