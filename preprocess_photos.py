@@ -7,6 +7,8 @@
 
 import cv2
 import numpy as np
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
 import sys; sys.path.insert(0, "/home/Zhen/projects/SegmentAnyTooth")
 from user_env import get_paths, setup_user_dirs, get_user_dir
@@ -228,54 +230,68 @@ PROCESSORS = {
     'endoscope':    process_endoscope,
 }
 
-print("="*60)
-print("📸 照片預處理 v4 - 高品質照片輕度版")
-print("="*60)
-print(f"輸入: {INPUT_DIR}")
-print(f"輸出: {OUTPUT_DIR}")
+PROCESSORS = {
+    'phone_normal': process_phone_normal,
+    'phone_405nm':  process_phone_405nm,
+    'endoscope':    process_endoscope,
+}
+_VIEWS      = ['front', 'left_side', 'right_side', 'upper_occlusal', 'lower_occlusal']
+_print_lock = threading.Lock()
 
-# ── 動態收集要處理的檔案（支援單張與多張模式）──
-_VIEWS = ['front', 'left_side', 'right_side', 'upper_occlusal', 'lower_occlusal']
-files_to_process: dict[str, str] = {}  # photo_name -> light_type
 
-# 單張模式：front.jpg, left_side.jpg …
-for photo_name, light_type in PHOTO_CONFIG.items():
-    if (INPUT_DIR / photo_name).exists():
-        files_to_process[photo_name] = light_type
-
-# 多張模式：front_0.jpg, front_1.jpg, upper_occlusal_0.jpg …
-for view in _VIEWS:
-    for i in range(50):
-        photo_name = f"{view}_{i}.jpg"
-        if (INPUT_DIR / photo_name).exists():
-            files_to_process[photo_name] = 'phone_normal'
-        else:
-            break  # 每個 view 以第一個缺口為止
-
-count = 0
-for photo_name, light_type in files_to_process.items():
+def _process_one(photo_name: str, light_type: str) -> bool:
     input_path = INPUT_DIR / photo_name
-    print(f"\n{'─'*50}")
-    print(f"  📷 {photo_name}  [{light_type}]")
-
     img = cv2.imread(str(input_path))
     if img is None:
-        print(f"  ❌ 無法讀取")
-        continue
-
+        with _print_lock:
+            print(f"  ❌ {photo_name} 無法讀取")
+        return False
     h, w = img.shape[:2]
-    print(f"     原始尺寸: {w}x{h}")
-
-    processor = PROCESSORS[light_type]
-    result = processor(img)
-    final = pad_to_square(result, target=512)
-
+    result = PROCESSORS[light_type](img)
+    final  = pad_to_square(result, target=512)
     out_path = (OUTPUT_DIR / photo_name).with_suffix('.jpg')
     cv2.imwrite(str(out_path), final)
-    print(f"  ✅ 輸出: {out_path.name} (512x512)")
-    count += 1
+    with _print_lock:
+        print(f"  ✅ {out_path.name} ({w}x{h} → 512x512)")
+    return True
 
-print(f"\n{'='*60}")
-print(f"✅ 完成！共 {count} 張")
-print(f"{'='*60}")
-print(f"\n💡 下一步: python analyze_real_teeth.py")
+
+def main():
+    print("="*60)
+    print("📸 照片預處理 v4 - 高品質照片輕度版")
+    print("="*60)
+    print(f"輸入: {INPUT_DIR}")
+    print(f"輸出: {OUTPUT_DIR}")
+
+    files_to_process: dict[str, str] = {}
+
+    for photo_name, light_type in PHOTO_CONFIG.items():
+        if (INPUT_DIR / photo_name).exists():
+            files_to_process[photo_name] = light_type
+
+    for view in _VIEWS:
+        for i in range(50):
+            photo_name = f"{view}_{i}.jpg"
+            if (INPUT_DIR / photo_name).exists():
+                files_to_process[photo_name] = 'phone_normal'
+            else:
+                break
+
+    MAX_WORKERS = min(4, len(files_to_process)) if files_to_process else 1
+    count = 0
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = {
+            executor.submit(_process_one, name, lt): name
+            for name, lt in files_to_process.items()
+        }
+        for fut in as_completed(futures):
+            if fut.result():
+                count += 1
+
+    print(f"\n{'='*60}")
+    print(f"✅ 完成！共 {count} 張（最多 {MAX_WORKERS} 張並行）")
+    print(f"{'='*60}")
+
+
+if __name__ == "__main__":
+    main()
