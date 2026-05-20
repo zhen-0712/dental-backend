@@ -27,7 +27,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
-import uvicorn, uuid, shutil, subprocess, json
+import uvicorn, uuid, shutil, subprocess, json, concurrent.futures, os as _os
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 import requests
@@ -236,23 +236,31 @@ def run_init_pipeline(task_id: str, analysis_id: int, user_id: int):
         ok, err = run_script("analyze_real_teeth.py", udir)
         if not ok: raise Exception(f"analyze failed:\n{err}")
 
+        # ── 一般模型 + 假牙模型同時並行生成（兩者寫入不同目錄，完全獨立）──
         tasks[task_id]["step"] = "creating_3d"
-        ok, err = run_script("create_personalized_3d_real.py", udir)
-        if not ok: raise Exception(f"create_3d failed:\n{err}")
 
-        tasks[task_id]["step"] = "creating_3d_teaching"
-        import os as _os
-        _env_teaching = _os.environ.copy()
-        _env_teaching["DENTAL_USER_DIR"] = str(udir)
-        _env_teaching["TEACHING_MODEL"]  = "1"
-        import subprocess as _sp
-        _res = _sp.run(
-            [PYTHON, str(BASE / "create_personalized_3d_real.py")],
-            capture_output=True, text=True, cwd=str(BASE),
-            timeout=600, env=_env_teaching
-        )
-        if _res.returncode != 0:
-            print(f"[WARNING] teaching model generation failed:\n{_res.stderr[-500:]}")
+        def _build_3d(teaching: bool):
+            env = _os.environ.copy()
+            env["DENTAL_USER_DIR"] = str(udir)
+            env["PYTHONWARNINGS"] = "ignore"
+            if teaching:
+                env["TEACHING_MODEL"] = "1"
+            return subprocess.run(
+                [PYTHON, str(BASE / "create_personalized_3d_real.py")],
+                capture_output=True, text=True, cwd=str(BASE), timeout=600, env=env
+            )
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as _pool:
+            _f_normal   = _pool.submit(_build_3d, False)
+            _f_teaching = _pool.submit(_build_3d, True)
+            _res_normal   = _f_normal.result()
+            _res_teaching = _f_teaching.result()
+
+        if _res_normal.returncode != 0:
+            _err = (_res_normal.stderr or _res_normal.stdout)[-2000:]
+            raise Exception(f"create_3d failed:\n{_err}")
+        if _res_teaching.returncode != 0:
+            print(f"[WARNING] teaching model generation failed:\n{_res_teaching.stderr[-500:]}")
 
         umodel_dir = udir / "personalized_3d_models_real"
         model_ready = umodel_dir.exists() and (umodel_dir / "custom_upper_only.obj").exists()
