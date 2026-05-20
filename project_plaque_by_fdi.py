@@ -17,6 +17,10 @@ from pathlib import Path
 
 import sys; sys.path.insert(0, "/home/Zhen/projects/SegmentAnyTooth")
 from user_env import get_paths, setup_user_dirs, BASE as _SAT_BASE
+from segmentanytooth import get_model_path, LEFT_CLASSES
+from sam import sam_load, sam_predict
+from ultralytics import YOLO
+from utils import suppress_stdout
 _PATHS = get_paths()
 setup_user_dirs(_PATHS["user_dir"])
 BASE         = _PATHS["user_dir"]
@@ -30,6 +34,15 @@ LOWER_OBJ    = MODEL_DIR / "custom_lower_only.obj"
 UPPER_LABELS = MODEL_DIR / "upper_seg_labels.npy"
 LOWER_LABELS = MODEL_DIR / "lower_seg_labels.npy"
 MODEL_PATH   = MODEL_DIR / "custom_real_teeth.obj"
+
+print("🔧 預載入 SAM + YOLO 模型中...")
+with suppress_stdout():
+    _SAM_MODEL = sam_load(get_model_path("sam", str(WEIGHT_DIR)))
+    _YOLO_MODELS = {
+        v: YOLO(model=get_model_path(v, str(WEIGHT_DIR)))
+        for v in ['front', 'right', 'upper', 'lower']
+    }
+print("✅ 模型預載完成")
 
 COLOR_NORMAL = np.array([0.92, 0.86, 0.80])
 
@@ -227,13 +240,36 @@ def run_sat_for_view(view_name, cfg):
         print(f"    ⚠️  找不到照片: {cfg['photo_file']}")
         return None
     try:
-        from segmentanytooth import predict
-        fdi_mask = predict(
-            image_path=str(photo_path),
-            view=cfg['sat_view'],
-            weight_dir=str(WEIGHT_DIR),
-            sam_batch_size=10
-        )
+        sat_view    = cfg['sat_view']
+        should_flip = sat_view == "left"
+        yolo_key    = "right" if sat_view == "left" else sat_view
+        image = cv2.imread(str(photo_path))
+        if should_flip:
+            image = cv2.flip(image, 1)
+        with suppress_stdout():
+            r = _YOLO_MODELS[yolo_key].predict(
+                image, save=False, save_txt=False,
+                save_conf=False, save_crop=False, project=None,
+            )[0]
+        if r.boxes is None or len(r.boxes) == 0:
+            fdi_mask = np.zeros(image.shape[:2], dtype=np.uint8)
+        else:
+            names = r.names if not should_flip else LEFT_CLASSES
+            boxes = r.boxes.xyxy.cpu().numpy()
+            clss  = r.boxes.cls.cpu().numpy().astype(np.int32)
+            if boxes.ndim == 1: boxes = boxes[np.newaxis, :]
+            if clss.ndim == 0:  clss  = clss[np.newaxis]
+            sort_ids = np.argsort(clss)
+            clss, boxes = clss[sort_ids], boxes[sort_ids]
+            if should_flip:
+                w = image.shape[1]; image = cv2.flip(image, 1)
+                b = boxes.copy(); b[:, [0, 2]] = w - b[:, [2, 0]]; boxes = b
+            image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            masks = sam_predict(sam=_SAM_MODEL, boxes_xyxy=boxes,
+                                image=image_rgb, batch_size=10)
+            fdi_mask = np.zeros(image.shape[:2], dtype=np.uint8)
+            for cls_id, m in zip(clss, masks):
+                fdi_mask[m == 1] = int(names[cls_id][-2:])
         print(f"    SAT 偵測 FDI: {sorted(int(v) for v in np.unique(fdi_mask) if v > 0)}")
         return fdi_mask
     except Exception as e:
