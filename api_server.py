@@ -323,7 +323,7 @@ def run_plaque_pipeline(task_id: str, analysis_id: int, user_id: int):
             raise Exception("尚未初始化，請先執行初始化流程")
 
         tasks[task_id]["step"] = "detecting_plaque"
-        ok, err = run_script("color_test/teeth_test.py", udir)
+        ok, err = run_script("teeth_test.py", udir)
         if not ok: raise Exception(f"teeth_test failed:\n{err}")
 
         tasks[task_id]["step"] = "extracting_regions"
