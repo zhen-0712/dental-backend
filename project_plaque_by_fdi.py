@@ -21,13 +21,16 @@ from segmentanytooth import get_model_path, LEFT_CLASSES
 from sam import sam_load, sam_predict
 from ultralytics import YOLO
 from utils import suppress_stdout
+import os as _os
 _PATHS = get_paths()
 setup_user_dirs(_PATHS["user_dir"])
 BASE         = _PATHS["user_dir"]
+_MODEL_TYPE  = _os.environ.get("DENTAL_MODEL_TYPE", "regular")
 ROI_MASK_DIR = _PATHS["plaque_output"]
-MODEL_DIR    = _PATHS["model_dir"]
+MODEL_DIR    = _PATHS["model_dir_teaching"] if _MODEL_TYPE == "teaching" else _PATHS["model_dir"]
 OUTPUT_DIR   = _PATHS["plaque_output"]
 WEIGHT_DIR   = _SAT_BASE / "weight"
+_YOLO_CONF   = 0.10 if _MODEL_TYPE == "teaching" else 0.20
 
 UPPER_OBJ    = MODEL_DIR / "custom_upper_only.obj"
 LOWER_OBJ    = MODEL_DIR / "custom_lower_only.obj"
@@ -49,50 +52,107 @@ COLOR_NORMAL = np.array([0.92, 0.86, 0.80])
 VIEW_CONFIG = {
     'front': {
         'sat_view': 'front', 'roi_mask': 'roi_mask_front.png',
-        'photo_file': 'real_teeth_processed/front.jpg',
+        'photo_file': 'real_teeth/front.jpg',
         'proj_u_axis': 0, 'proj_v_axis': 2,
         'flip_u': True,  'flip_v': True,
-        'scale_u': 1.0,  'scale_v': 0.55,
-        'offset_u': 0.0, 'offset_v': -1.05,
+        'scale_u': 0.95,  'scale_v': 1.0,
+        'offset_u': 0.08, 'offset_v': -0.15,
         'vert_clip_pct': 5,
     },
     'left_side': {
         'sat_view': 'left', 'roi_mask': 'roi_mask_left_side.png',
-        'photo_file': 'real_teeth_processed/left_side.jpg',
+        'photo_file': 'real_teeth/left_side.jpg',
         'proj_u_axis': 1, 'proj_v_axis': 2,
-        'flip_u': False, 'flip_v': True,
-        'scale_u': 1.0,  'scale_v': 0.55,
-        'offset_u': -0.45, 'offset_v': -0.60,
+        'flip_u': True, 'flip_v': True,
+        'scale_u': 1.0,  'scale_v': 1.0,
+        'offset_u': 0.1, 'offset_v': 0.05,
         'vert_clip_pct': 5,
     },
     'right_side': {
         'sat_view': 'right', 'roi_mask': 'roi_mask_right_side.png',
-        'photo_file': 'real_teeth_processed/right_side.jpg',
+        'photo_file': 'real_teeth/right_side.jpg',
         'proj_u_axis': 1, 'proj_v_axis': 2,
         'flip_u': True,  'flip_v': True,
-        'scale_u': 1.0,  'scale_v': 0.55,
-        'offset_u': -0.45, 'offset_v': -0.20,
+        'scale_u': 1,  'scale_v': 1,
+        'offset_u': 0.15, 'offset_v': 0,
         'vert_clip_pct': 10,
     },
     'upper_occlusal': {
         'sat_view': 'upper', 'roi_mask': 'roi_mask_upper_occlusal.png',
-        'photo_file': 'real_teeth_processed/upper_occlusal.jpg',
+        'photo_file': 'real_teeth/upper_occlusal.jpg',
         'proj_u_axis': 0, 'proj_v_axis': 1,
         'flip_u': True,  'flip_v': True,
-        'scale_u': 1.6,  'scale_v': 1.15,
-        'offset_u': 0.0, 'offset_v': 0.0,
+        'scale_u': 1.0,  'scale_v': 1.0,
+        'offset_u': 0.0, 'offset_v': 0.15,
         'vert_clip_pct': 5,
     },
     'lower_occlusal': {
         'sat_view': 'lower', 'roi_mask': 'roi_mask_lower_occlusal.png',
-        'photo_file': 'real_teeth_processed/lower_occlusal.jpg',
+        'photo_file': 'real_teeth/lower_occlusal.jpg',
         'proj_u_axis': 0, 'proj_v_axis': 1,
         'flip_u': True,  'flip_v': False,
         'scale_u': 1.0,  'scale_v': 1.0,
-        'offset_u': 0.0, 'offset_v': 0.0,
+        'offset_u': 0.1, 'offset_v': 0.05,
         'vert_clip_pct': 5,
     },
 }
+
+# Teaching model (dental mannequin) calibration.
+# The mannequin has different 3D coordinate extents than the personalized real-tooth model.
+# Tune offset_v / scale_v per view by inspecting debug_proj_*.png after each run:
+#   - green dots too HIGH  → increase offset_v (toward 0 / positive)
+#   - green dots too LOW   → decrease offset_v (more negative)
+#   - green dots too SPREAD → decrease scale_v
+#   - green dots too NARROW → increase scale_v
+VIEW_CONFIG_TEACHING = {
+    'front': {
+        'sat_view': 'front', 'roi_mask': 'roi_mask_front.png',
+        'photo_file': 'real_teeth/front.jpg',
+        'proj_u_axis': 0, 'proj_v_axis': 2,
+        'flip_u': True,  'flip_v': True,
+        'scale_u': 0.95,  'scale_v': 1.0,
+        'offset_u': 0.08, 'offset_v': -0.15,
+        'vert_clip_pct': 5,
+    },
+    'left_side': {
+        'sat_view': 'left', 'roi_mask': 'roi_mask_left_side.png',
+        'photo_file': 'real_teeth/left_side.jpg',
+        'proj_u_axis': 1, 'proj_v_axis': 2,
+        'flip_u': True, 'flip_v': True,
+        'scale_u': 1.0,  'scale_v': 1.0,
+        'offset_u': 0.1, 'offset_v': 0.05,
+        'vert_clip_pct': 5,
+    },
+    'right_side': {
+        'sat_view': 'right', 'roi_mask': 'roi_mask_right_side.png',
+        'photo_file': 'real_teeth/right_side.jpg',
+        'proj_u_axis': 1, 'proj_v_axis': 2,
+        'flip_u': True,  'flip_v': True,
+        'scale_u': 1,  'scale_v': 1,
+        'offset_u': 0.15, 'offset_v': 0,
+        'vert_clip_pct': 10,
+    },
+    'upper_occlusal': {
+        'sat_view': 'upper', 'roi_mask': 'roi_mask_upper_occlusal.png',
+        'photo_file': 'real_teeth/upper_occlusal.jpg',
+        'proj_u_axis': 0, 'proj_v_axis': 1,
+        'flip_u': True,  'flip_v': True,
+        'scale_u': 1.0,  'scale_v': 1.0,
+        'offset_u': 0.0, 'offset_v': 0.15,
+        'vert_clip_pct': 5,
+    },
+    'lower_occlusal': {
+        'sat_view': 'lower', 'roi_mask': 'roi_mask_lower_occlusal.png',
+        'photo_file': 'real_teeth/lower_occlusal.jpg',
+        'proj_u_axis': 0, 'proj_v_axis': 1,
+        'flip_u': True,  'flip_v': False,
+        'scale_u': 1.0,  'scale_v': 1.0,
+        'offset_u': 0.1, 'offset_v': 0.05,
+        'vert_clip_pct': 5,
+    },
+}
+
+VIEW_CONFIG = VIEW_CONFIG_TEACHING if _MODEL_TYPE == "teaching" else VIEW_CONFIG
 
 
 # ==================== 工具函式 ====================
@@ -110,15 +170,33 @@ def build_fdi_map(upper_verts, upper_labels, lower_verts, lower_labels):
     return fdi_map
 
 
+# def get_sat_bbox(fdi_mask_sat, fdi):
+#     sat_h, sat_w = fdi_mask_sat.shape
+#     ys, xs = np.where(fdi_mask_sat == fdi)
+#     if len(ys) == 0:
+#         return None
+#     return (int(xs.min()), int(ys.min()),
+#             max(int(xs.max() - xs.min()), 1),
+#             max(int(ys.max() - ys.min()), 1),
+#             sat_w, sat_h)
 def get_sat_bbox(fdi_mask_sat, fdi):
     sat_h, sat_w = fdi_mask_sat.shape
-    ys, xs = np.where(fdi_mask_sat == fdi)
-    if len(ys) == 0:
+    
+    # 建立這顆牙齒專屬的 2D 遮罩 (只留這顆牙)
+    single_mask = (fdi_mask_sat == fdi).astype(np.uint8)
+    
+    # ★ 救援核心：找輪廓，並只保留面積最大的那一塊！
+    contours, _ = cv2.findContours(single_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    if not contours:
         return None
-    return (int(xs.min()), int(ys.min()),
-            max(int(xs.max() - xs.min()), 1),
-            max(int(ys.max() - ys.min()), 1),
-            sat_w, sat_h)
+        
+    # 找出面積最大的輪廓（真正的牙齒主體，捨棄跑到天花板的雜訊）
+    largest_cnt = max(contours, key=cv2.contourArea)
+    x, y, w, h = cv2.boundingRect(largest_cnt)
+    
+    # 回傳乾淨、緊密的 Bounding Box
+    return (int(x), int(y), max(int(w), 1), max(int(h), 1), sat_w, sat_h)
 
 
 def clip_tooth_verts(tooth_verts, clip_pct):
@@ -248,7 +326,8 @@ def run_sat_for_view(view_name, cfg):
             image = cv2.flip(image, 1)
         with suppress_stdout():
             r = _YOLO_MODELS[yolo_key].predict(
-                image, save=False, save_txt=False,
+                image, conf=_YOLO_CONF,
+                save=False, save_txt=False,
                 save_conf=False, save_crop=False, project=None,
             )[0]
         if r.boxes is None or len(r.boxes) == 0:

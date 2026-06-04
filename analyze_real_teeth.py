@@ -278,7 +278,13 @@ def _preload_models():
             view: YOLO(model=get_model_path(view, weight_dir))
             for view in ['front', 'right', 'upper', 'lower']
         }
-    print("✅ 模型預載完成")
+        # Pre-fuse all YOLO models in the main thread: the first predict() call
+        # triggers model.fuse() which mutates the model. Doing this before
+        # parallel inference prevents concurrent fuse() calls (AttributeError: bn).
+        _dummy = np.zeros((64, 64, 3), dtype=np.uint8)
+        for _m in yolo_models.values():
+            _m.predict(_dummy, verbose=False)
+    print("✅ 模型預載完成（已預熱 fuse）")
     return sam, yolo_models
 
 

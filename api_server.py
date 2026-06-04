@@ -136,11 +136,12 @@ def user_data_dir(user_id: int) -> Path:
         (d / sub).mkdir(parents=True, exist_ok=True)
     return d
 
-def run_script(script_name: str, user_dir: Path = None) -> tuple[bool, str]:
+def run_script(script_name: str, user_dir: Path = None, model_type: str = "regular") -> tuple[bool, str]:
     import os
     env = os.environ.copy()
     if user_dir:
         env["DENTAL_USER_DIR"] = str(user_dir)
+    env["DENTAL_MODEL_TYPE"] = model_type
     env["PYTHONWARNINGS"] = "ignore"   # suppress model-registry UserWarnings flooding stderr
     result = subprocess.run(
         [PYTHON, str(BASE / script_name)],
@@ -309,7 +310,7 @@ def run_init_pipeline(task_id: str, analysis_id: int, user_id: int):
 
 # ==================== 菌斑分析流程 ====================
 
-def run_plaque_pipeline(task_id: str, analysis_id: int, user_id: int):
+def run_plaque_pipeline(task_id: str, analysis_id: int, user_id: int, model_type: str = "regular"):
     db = next(get_db())
     analysis = db.query(Analysis).filter(Analysis.id == analysis_id).first() if analysis_id else None
     udir = user_data_dir(user_id) if user_id else BASE
@@ -318,20 +319,28 @@ def run_plaque_pipeline(task_id: str, analysis_id: int, user_id: int):
             analysis.status = AnalysisStatus.running
             db.commit()
 
-        umodel_dir = udir / "personalized_3d_models_real"
+        # For teaching model, check the teaching directory; otherwise use regular
+        if model_type == "teaching":
+            umodel_dir = udir / "personalized_3d_models_real_teaching"
+        else:
+            umodel_dir = udir / "personalized_3d_models_real"
         if not (umodel_dir / "custom_upper_only.obj").exists():
             raise Exception("尚未初始化，請先執行初始化流程")
 
+        tasks[task_id]["step"] = "preprocessing_photos"
+        ok, err = run_script("preprocess_photos.py", udir)
+        if not ok: raise Exception(f"preprocess failed:\n{err}")
+
         tasks[task_id]["step"] = "detecting_plaque"
-        ok, err = run_script("teeth_test.py", udir)
+        ok, err = run_script("teeth_test.py", udir, model_type)
         if not ok: raise Exception(f"teeth_test failed:\n{err}")
 
         tasks[task_id]["step"] = "extracting_regions"
-        ok, err = run_script("extract_plaque_regions.py", udir)
+        ok, err = run_script("extract_plaque_regions.py", udir, model_type)
         if not ok: raise Exception(f"extract_plaque failed:\n{err}")
 
         tasks[task_id]["step"] = "projecting_plaque"
-        ok, err = run_script("project_plaque_by_fdi.py", udir)
+        ok, err = run_script("project_plaque_by_fdi.py", udir, model_type)
         if not ok: raise Exception(f"project_plaque failed:\n{err}")
 
         stats = {}
@@ -352,18 +361,20 @@ def run_plaque_pipeline(task_id: str, analysis_id: int, user_id: int):
         glb_fname = "plaque_by_fdi.glb"
         if analysis_id and glb_src.exists():
             import shutil
-            date_str = now_taipei().strftime("%Y%m%d")
-            glb_fname = f"plaque_{date_str}_{analysis_id}.glb"
-            glb_copy = udir / "plaque_output" / glb_fname
+            date_str  = now_taipei().strftime("%Y%m%d")
+            t_suffix  = "_t" if model_type == "teaching" else ""
+            glb_fname = f"plaque_{date_str}_{analysis_id}{t_suffix}.glb"
+            glb_copy  = udir / "plaque_output" / glb_fname
             shutil.copy2(str(glb_src), str(glb_copy))
             if obj_src.exists():
-                obj_copy = udir / "plaque_output" / f"plaque_{date_str}_{analysis_id}.obj"
+                obj_copy = udir / "plaque_output" / f"plaque_{date_str}_{analysis_id}{t_suffix}.obj"
                 shutil.copy2(str(obj_src), str(obj_copy))
         result = {
-            "glb_url":       f"/files/{glb_fname}",
-            "obj_url":       "/files/plaque_by_fdi.obj",
-            "stats":         stats,
+            "glb_url":        f"/files/{glb_fname}",
+            "obj_url":        "/files/plaque_by_fdi.obj",
+            "stats":          stats,
             "tooth_analysis": tooth_json,
+            "model_source":   model_type,
         }
 
         if analysis:
@@ -446,6 +457,7 @@ async def analyze_plaque(
     upper_occlusal:   UploadFile = File(...),
     lower_occlusal:   UploadFile = File(...),
     mirror:           str = Form("0"),
+    model_type:       str = Form("regular"),   # "regular" | "teaching"
     user: User | None = Depends(get_current_user_optional),
     db:   Session     = Depends(get_db),
 ):
@@ -456,6 +468,7 @@ async def analyze_plaque(
 
     task_id = str(uuid.uuid4())[:8]
     analysis_id = None
+    _mtype = model_type if model_type in ("regular", "teaching") else "regular"
 
     if user:
         analysis = Analysis(user_id=user.id, type=AnalysisType.plaque)
@@ -467,7 +480,7 @@ async def analyze_plaque(
     _uid = user.id if user else None
     tasks[task_id] = {"status": "queued", "step": "waiting", "type": "plaque",
                       "analysis_id": analysis_id}
-    background_tasks.add_task(run_plaque_pipeline, task_id, analysis_id, _uid)
+    background_tasks.add_task(run_plaque_pipeline, task_id, analysis_id, _uid, _mtype)
     return {"task_id": task_id, "status": "queued", "type": "plaque"}
 
 
@@ -893,7 +906,7 @@ from fastapi import Request, Response
 from fastapi.responses import HTMLResponse, StreamingResponse
 
 # --- [修改區] 請填入樹莓派當前的 IP ---
-PI_IP = "192.168.50.254" 
+PI_IP = "172.20.10.3" 
 
 @app.get("/pi_interface/{path:path}")
 @app.get("/pi_interface/")

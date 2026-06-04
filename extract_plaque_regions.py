@@ -17,15 +17,19 @@ import numpy as np
 import json
 from pathlib import Path
 
+import os as _os
 import sys; sys.path.insert(0, "/home/Zhen/projects/SegmentAnyTooth")
 from user_env import get_paths, setup_user_dirs, BASE as _SAT_BASE
 _PATHS = get_paths()
 setup_user_dirs(_PATHS["user_dir"])
-BASE       = _PATHS["user_dir"]
-MASK_DIR   = _PATHS["teeth_color_test"]
-PHOTO_DIR  = _PATHS["real_teeth"]
-OUTPUT_DIR = _PATHS["plaque_output"]
-WEIGHT_DIR = _SAT_BASE / "weight"
+BASE        = _PATHS["user_dir"]
+MASK_DIR    = _PATHS["teeth_color_test"]
+PHOTO_DIR   = _PATHS["real_teeth_proc"]
+OUTPUT_DIR  = _PATHS["plaque_output"]
+WEIGHT_DIR  = _SAT_BASE / "weight"
+_MODEL_TYPE = _os.environ.get("DENTAL_MODEL_TYPE", "regular")
+# Teaching model: lower YOLO conf so plastic teeth are still detected
+_YOLO_CONF  = 0.10 if _MODEL_TYPE == "teaching" else 0.20
 
 # ── 預載 SAT 模型（整個 script 只載一次，所有視角共用）──
 from segmentanytooth import get_model_path, LEFT_CLASSES
@@ -46,22 +50,27 @@ VIEW_CONFIG = {
     'front': {
         'mask_file': 'mask_front.jpg', 'photo_file': 'front.jpg',
         'sat_view': 'front', 'jaw_split_ratio': 0.50, 'jaw_label': 'both',
+        'upward_px': 60,   # gum-line plaque: extend ROI 60px upward
     },
     'left_side': {
         'mask_file': 'mask_left_side.jpg', 'photo_file': 'left_side.jpg',
         'sat_view': 'left', 'jaw_split_ratio': None, 'jaw_label': 'both',
+        'upward_px': 25,   # side view: less upward to avoid gum misdetection
     },
     'right_side': {
         'mask_file': 'mask_right_side.jpg', 'photo_file': 'right_side.jpg',
         'sat_view': 'right', 'jaw_split_ratio': None, 'jaw_label': 'both',
+        'upward_px': 25,   # side view: less upward to avoid gum misdetection
     },
     'upper_occlusal': {
         'mask_file': 'mask_upper_occlusal.jpg', 'photo_file': 'upper_occlusal.jpg',
         'sat_view': 'upper', 'jaw_split_ratio': None, 'jaw_label': 'upper',
+        'upward_px': 0,    # occlusal: no upward needed (viewed from above/below)
     },
     'lower_occlusal': {
         'mask_file': 'mask_lower_occlusal.jpg', 'photo_file': 'lower_occlusal.jpg',
         'sat_view': 'lower', 'jaw_split_ratio': None, 'jaw_label': 'lower',
+        'upward_px': 0,
     },
 }
 
@@ -79,7 +88,8 @@ def get_tooth_roi(photo_path, sat_view):
             image = cv2.flip(image, 1)
         with suppress_stdout():
             r = _YOLO_MODELS[yolo_key].predict(
-                image, save=False, save_txt=False,
+                image, conf=_YOLO_CONF,
+                save=False, save_txt=False,
                 save_conf=False, save_crop=False, project=None,
             )[0]
         if r.boxes is None or len(r.boxes) == 0:
@@ -211,18 +221,29 @@ for view_name, cfg in VIEW_CONFIG.items():
         print(f"  ⚠️  找不到原始照片: {cfg['photo_file']}，跳過 ROI 過濾")
 
     if binary_roi is not None:
-        filtered_mask = cv2.bitwise_and(raw_mask, binary_roi)
+        # Step 1: symmetric spread (covers gum-adjacent stains)
+        _dil_k_sym  = np.ones((25, 25), np.uint8)
+        dilated_roi = cv2.dilate(binary_roi, _dil_k_sym, iterations=2)
+        # Step 2: per-view asymmetric upward extension.
+        # anchor=(0, h-1) anchors at bottom row → extends upward only.
+        upward_px = cfg.get('upward_px', 30)
+        if upward_px > 0:
+            _dil_k_up   = np.ones((upward_px, 1), np.uint8)
+            dilated_roi = cv2.dilate(dilated_roi, _dil_k_up, anchor=(0, upward_px - 1))
+        filtered_mask = cv2.bitwise_and(raw_mask, dilated_roi)
         print(f"  過濾後菌斑像素: {(filtered_mask > 0).sum():,} ({(filtered_mask>0).sum()/img_h/img_w*100:.1f}%)")
     else:
+        dilated_roi   = None
         filtered_mask = raw_mask.copy()
         print(f"  （未做 ROI 過濾）")
 
     cv2.imwrite(str(OUTPUT_DIR / f"roi_mask_{view_name}.png"), filtered_mask)
 
-    # debug 疊圖
+    # debug 疊圖：深綠=dilated ROI，亮綠=原始ROI，藍=最終菌斑
     if binary_roi is not None:
         debug = cv2.cvtColor(raw_mask // 4, cv2.COLOR_GRAY2BGR)
-        debug[binary_roi > 0]    = [0, 60, 0]
+        debug[dilated_roi > 0]   = [0, 40, 0]
+        debug[binary_roi > 0]    = [0, 100, 0]
         debug[filtered_mask > 0] = [0, 0, 220]
         cv2.imwrite(str(OUTPUT_DIR / f"debug_roi_{view_name}.png"), debug)
 

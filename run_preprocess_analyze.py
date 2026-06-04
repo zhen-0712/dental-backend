@@ -20,6 +20,7 @@ WEIGHT_DIR = Path("/home/Zhen/projects/SegmentAnyTooth/weight")
 
 
 def _load_models():
+    import numpy as np
     from segmentanytooth import get_model_path
     from sam import sam_load
     from ultralytics import YOLO
@@ -31,7 +32,11 @@ def _load_models():
             v: YOLO(model=get_model_path(v, str(WEIGHT_DIR)))
             for v in ['front', 'right', 'upper', 'lower']
         }
-    print("✅ [並行] 模型載入完成")
+        # Pre-fuse: trigger model.fuse() in this thread before parallel inference
+        _dummy = np.zeros((64, 64, 3), dtype=np.uint8)
+        for _m in yolo_models.values():
+            _m.predict(_dummy, verbose=False)
+    print("✅ [並行] 模型載入完成（已預熱 fuse）")
     return sam, yolo_models
 
 

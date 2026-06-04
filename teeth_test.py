@@ -199,6 +199,8 @@ def detect_plaque(image_path):
     if valid_contours:
         cv2.drawContours(output,     valid_contours, -1, (0, 0, 255), 2)
         cv2.drawContours(clean_mask, valid_contours, -1, 255, -1)
+    _fill_k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11, 11))
+    clean_mask = cv2.morphologyEx(clean_mask, cv2.MORPH_CLOSE, _fill_k)
 
     name = os.path.basename(image_path)
     cv2.imwrite(os.path.join(output_dir, "det_"  + name), output)
@@ -265,10 +267,12 @@ def detect_plaque(image_path):
 
     # 面積門檻維持 150 即可，不用太高
     valid_contours = [cnt for cnt in contours if cv2.contourArea(cnt) > 150]
-    
+
     if valid_contours:
         cv2.drawContours(output,     valid_contours, -1, (0, 0, 255), 2)
         cv2.drawContours(clean_mask, valid_contours, -1, 255, -1)
+    _fill_k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11, 11))
+    clean_mask = cv2.morphologyEx(clean_mask, cv2.MORPH_CLOSE, _fill_k)
 
     name = os.path.basename(image_path)
     cv2.imwrite(os.path.join(output_dir, "det_"  + name), output)
