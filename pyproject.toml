@@ -11,6 +11,8 @@ requires-python = ">=3.10,<3.11"
 dependencies = [
     "numpy<2",
     "opencv-python>=4.11.0.86",
+    "open-clip-torch>=2.24.0",
+    "Pillow>=10.0.0",
     "segment-anything-hq>=0.3",
     "timm>=0.9.2,<1",
     "torch>=2.7.0",
