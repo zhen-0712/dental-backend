@@ -39,6 +39,7 @@ from database import get_db, init_db, Analysis, AnalysisType, AnalysisStatus, Us
 from email_notify import send_analysis_done, send_analysis_failed
 from auth import (create_token, decode_token, authenticate_user,
                   create_user, get_user_by_email, get_user_by_id)
+from photo_validator import validate_uploads, validate_view_angle
 
 app = FastAPI(title="DentalVis API")
 
@@ -413,6 +414,23 @@ def run_plaque_pipeline(task_id: str, analysis_id: int, user_id: int, model_type
     finally:
         db.close()
 
+# ==================== Photo Validation Endpoints ====================
+
+@app.post("/validate_angle")
+async def validate_angle_endpoint(
+    file: UploadFile = File(...),
+    view: str        = Form(...),
+):
+    """即時視角驗證（單張）：前端上傳後呼叫，回傳 CLIP 分類結果。"""
+    if view not in VIEW_FILENAMES:
+        raise HTTPException(status_code=400, detail="Invalid view")
+    raw    = await file.read()
+    errors = validate_view_angle(view, raw)
+    if errors:
+        e = errors[0]
+        return {"ok": False, "code": e.code, "message": e.message}
+    return {"ok": True}
+
 # ==================== Analysis Endpoints ====================
 
 @app.post("/init")
@@ -427,10 +445,17 @@ async def init_model(
     user: User | None = Depends(get_current_user_optional),
     db:   Session     = Depends(get_db),
 ):
-    _udir = user_data_dir(user.id) if user else BASE
-    save_uploads({"front": front, "left_side": left_side, "right_side": right_side,
-                  "upper_occlusal": upper_occlusal, "lower_occlusal": lower_occlusal},
-                 _udir / "real_teeth", mirror=mirror == "1")
+    _udir    = user_data_dir(user.id) if user else BASE
+    _uploads = {"front": front, "left_side": left_side, "right_side": right_side,
+                "upper_occlusal": upper_occlusal, "lower_occlusal": lower_occlusal}
+
+    result = validate_uploads(_uploads)
+    if not result.ok:
+        raise HTTPException(status_code=422,
+                            detail=[{"view": e.view, "code": e.code, "message": e.message}
+                                    for e in result.errors])
+
+    save_uploads(_uploads, _udir / "real_teeth", mirror=mirror == "1")
 
     task_id = str(uuid.uuid4())[:8]
     analysis_id = None
@@ -461,10 +486,17 @@ async def analyze_plaque(
     user: User | None = Depends(get_current_user_optional),
     db:   Session     = Depends(get_db),
 ):
-    _udir = user_data_dir(user.id) if user else BASE
-    save_uploads({"front": front, "left_side": left_side, "right_side": right_side,
-                  "upper_occlusal": upper_occlusal, "lower_occlusal": lower_occlusal},
-                 _udir / "real_teeth", mirror=mirror == "1")
+    _udir    = user_data_dir(user.id) if user else BASE
+    _uploads = {"front": front, "left_side": left_side, "right_side": right_side,
+                "upper_occlusal": upper_occlusal, "lower_occlusal": lower_occlusal}
+
+    result = validate_uploads(_uploads)
+    if not result.ok:
+        raise HTTPException(status_code=422,
+                            detail=[{"view": e.view, "code": e.code, "message": e.message}
+                                    for e in result.errors])
+
+    save_uploads(_uploads, _udir / "real_teeth", mirror=mirror == "1")
 
     task_id = str(uuid.uuid4())[:8]
     analysis_id = None
