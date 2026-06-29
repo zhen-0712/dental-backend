@@ -86,6 +86,7 @@ def validate_quality(view: str, raw: bytes) -> list[PhotoError]:
 # ── Layer 2: 幾何視角分類（front 模型 + FDI 位置規則）───────────────────
 
 _yolo_clf: dict = {}
+_cnn_clf:  dict = {}   # CNN 視角分類器（lazy load）
 
 # FDI 象限
 _FDI_UPPER_R = frozenset({11, 12, 13, 14, 15, 16, 17, 18})
@@ -103,8 +104,18 @@ _FDI_POSTERIORS   = frozenset({
 _FDI_FRONT_TEETH  = frozenset({11,12,13, 21,22,23, 31,32, 41,42})
 
 # 判斷門檻
-_GEO_RATIO_THRESH   = 0.78   # expected / best 低於此才報錯
+_GEO_RATIO_THRESH   = 0.70   # combined_exp / best_geo 低於此才報錯
 _GEO_MIN_DETECTIONS = 2      # 偵測太少顆牙 → 不判斷
+_GEO_WEIGHT         = 0.40   # 幾何分數權重
+_SPEC_WEIGHT        = 0.60   # 專屬模型平均 confidence 權重
+
+# 每個視角對應的專屬 YOLO 模型（left_side 用翻轉圖跑 right 模型）
+_SPEC_MODEL_KEY: dict[str, str] = {
+    'right_side':     'right',
+    'left_side':      'right',
+    'upper_occlusal': 'upper',
+    'lower_occlusal': 'lower',
+}
 
 
 def _get_yolo_model(model_key: str):
@@ -233,26 +244,104 @@ def _geo_scores(dets: list[dict]) -> dict[str, float]:
     }
 
 
+def _cnn_classify(img) -> dict[str, float]:
+    """CNN 單次推理，回傳所有視角信心分數 dict。模型不存在回傳空 dict。"""
+    clf_path = _WEIGHT_DIR / "view_clf.pt"
+    if not clf_path.exists():
+        return {}
+
+    if "model" not in _cnn_clf:
+        import torch
+        import torchvision.transforms as T
+        import torchvision.models as tvm
+        import torch.nn as nn
+        ckpt = torch.load(str(clf_path), map_location="cpu")
+        m = tvm.mobilenet_v3_small()
+        m.classifier[3] = nn.Linear(m.classifier[3].in_features, len(ckpt["classes"]))
+        m.load_state_dict(ckpt["state_dict"])
+        m.eval()
+        _cnn_clf["model"]   = m
+        _cnn_clf["classes"] = ckpt["classes"]
+        _cnn_clf["tf"] = T.Compose([
+            T.Resize((224, 224)),
+            T.ToTensor(),
+            T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+        ])
+        print("[ViewCLF] CNN classifier loaded", flush=True)
+
+    try:
+        import torch
+        from PIL import Image
+        rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        x   = _cnn_clf["tf"](Image.fromarray(rgb)).unsqueeze(0)
+        with torch.no_grad():
+            probs = torch.softmax(_cnn_clf["model"](x), dim=1)[0].tolist()
+        return dict(zip(_cnn_clf["classes"], probs))
+    except Exception:
+        return {}
+
+
+def _spec_avg_conf(view: str, img) -> float:
+    """
+    跑對應視角的專屬 YOLO 模型，回傳所有偵測的平均 confidence（0-1）。
+    left_side 用水平翻轉圖跑 right 模型（兩側對稱）。
+    front 不需要專屬模型，直接回傳中性值 1.0（由幾何分數主導）。
+    """
+    model_key = _SPEC_MODEL_KEY.get(view)
+    if not model_key:
+        return 1.0  # front 視角：幾何分數已足夠
+
+    model    = _get_yolo_model(model_key)
+    run_img  = cv2.flip(img, 1) if view == 'left_side' else img
+    result   = model.predict(run_img, verbose=False)[0]
+
+    if result.boxes is None or len(result.boxes) == 0:
+        return 0.0
+    confs = result.boxes.conf.cpu().numpy()
+    return float(confs.mean())
+
+
 def validate_view_angle(view: str, raw: bytes) -> list[PhotoError]:
     """
-    Layer 2：幾何視角分類。
-    只用 front 模型（偵測全部 32 顆牙），取出 FDI 編號 + bbox 位置，
-    套幾何規則判斷上傳視角是否正確。
-    left_side 額外對水平翻轉圖再跑一次，取兩方向的較高分。
+    Layer 2：視角分類。CNN 為主要信號，幾何為備援。
+
+    決策順序：
+      1. CNN ≥ 0.55 → 直接通過（右側/左側正確照片 CNN~0.77-0.89）
+      2. CNN ≤ 0.25 → 直接報錯（錯誤照片 CNN~0.00-0.02）
+      3. CNN 不確定（0.25-0.55）→ 幾何分析做最終決定
+      4. 無 CNN 模型 → 純幾何
     """
     try:
         img = _to_cv2(raw)
         if img is None:
             return []
 
-        model    = _get_yolo_model("front")
-        r_normal = model.predict(img, verbose=False)[0]
-        dets     = _extract_detections(r_normal, model)
+        # ── Step 1: CNN 主要決策（不依賴 geo_n，解決 geo_n=0 漏判問題）──
+        cnn_probs = _cnn_classify(img)
+        cnn_score = cnn_probs.get(view, -1.0)
+        cnn_top   = max(cnn_probs, key=cnn_probs.get) if cnn_probs else None
+
+        def make_error(predicted: str) -> list[PhotoError]:
+            exp_zh  = VIEW_NAMES_ZH.get(view, view)
+            pred_zh = VIEW_NAMES_ZH.get(predicted, predicted)
+            return [PhotoError(view=view, code="wrong_angle",
+                message=f"{exp_zh}：這張照片看起來像{pred_zh}，請確認上傳到正確位置")]
+
+        if cnn_score >= 0.55:
+            print(f"[ViewCLF] view={view} cnn={cnn_score:.2f} top={cnn_top} → PASS", flush=True)
+            return []
+        if 0.0 <= cnn_score <= 0.25:
+            print(f"[ViewCLF] view={view} cnn={cnn_score:.2f} top={cnn_top} → FAIL", flush=True)
+            return make_error(cnn_top or view)
+
+        # ── Step 2: CNN 不確定（0.25-0.55）或無模型 → 幾何備援 ──────────
+        front_model = _get_yolo_model("front")
+        r_normal    = front_model.predict(img, verbose=False)[0]
+        dets        = _extract_detections(r_normal, front_model)
 
         if view == 'left_side':
-            # 翻轉後跑一次：翻轉圖的 right_side 分數 = 原圖 left_side 分數
-            r_flip    = model.predict(cv2.flip(img, 1), verbose=False)[0]
-            dets_flip = _extract_detections(r_flip, model)
+            r_flip    = front_model.predict(cv2.flip(img, 1), verbose=False)[0]
+            dets_flip = _extract_detections(r_flip, front_model)
             s_n = _geo_scores(dets)
             s_f = _geo_scores(dets_flip)
             geo = {
@@ -265,32 +354,35 @@ def validate_view_angle(view: str, raw: bytes) -> list[PhotoError]:
         else:
             geo = _geo_scores(dets)
 
-        n_dets     = len(dets)
-        best_view  = max(geo, key=lambda k: geo[k])
-        best_score = geo[best_view]
-        exp_score  = geo.get(view, 0.0)
+        n_dets         = len(dets)
+        best_geo_view  = max(geo, key=lambda k: geo[k])
+        best_geo_score = geo[best_geo_view]
+        geo_exp        = geo.get(view, 0.0)
+
+        # 錯誤訊息優先用 CNN 預測的視角（更準確），其次用幾何
+        predicted = (cnn_top if cnn_top and cnn_top != view else best_geo_view)
 
         scores_str = " ".join(f"{k}={v:.2f}" for k, v in geo.items())
         print(
-            f"[ViewCLF] geo n={n_dets} view={view} {scores_str} "
-            f"→ best={best_view}({best_score:.2f}) exp={exp_score:.2f}",
+            f"[ViewCLF] view={view} cnn={cnn_score:.2f} geo_n={n_dets} {scores_str} "
+            f"best_geo={best_geo_view}({best_geo_score:.2f})",
             flush=True,
         )
 
-        # 偵測牙齒太少 or 整體分數太低 → 沒有足夠信心，不擋
-        if n_dets < _GEO_MIN_DETECTIONS or best_score < 0.20:
+        if n_dets < _GEO_MIN_DETECTIONS or best_geo_score < 0.20:
             return []
 
-        if best_view != view:
-            ratio = exp_score / best_score if best_score > 0 else 0.0
-            if ratio < _GEO_RATIO_THRESH:
-                expected_zh  = VIEW_NAMES_ZH.get(view, view)
-                predicted_zh = VIEW_NAMES_ZH.get(best_view, best_view)
-                return [PhotoError(
-                    view=view,
-                    code="wrong_angle",
-                    message=f"{expected_zh}：這張照片看起來像{predicted_zh}，請確認上傳到正確位置",
-                )]
+        if view == 'front':
+            if best_geo_view != view:
+                ratio = geo_exp / best_geo_score if best_geo_score > 0 else 1.0
+                if best_geo_score >= 0.90 or ratio < _GEO_RATIO_THRESH:
+                    return make_error(predicted)
+            return []
+
+        # 其他視角：幾何 ratio 決定
+        ratio = geo_exp / best_geo_score if best_geo_score > 0 else 1.0
+        if ratio < _GEO_RATIO_THRESH:
+            return make_error(predicted)
 
     except Exception as e:
         print(f"[ViewCLF ERROR] view={view} {e}", flush=True)
