@@ -103,11 +103,23 @@ _FDI_POSTERIORS   = frozenset({
 })
 _FDI_FRONT_TEETH  = frozenset({11,12,13, 21,22,23, 31,32, 41,42})
 
+# CNN 開關（False = 純幾何模式，方便測試）
+_CNN_ENABLED = True
+
 # 判斷門檻
 _GEO_RATIO_THRESH   = 0.70   # combined_exp / best_geo 低於此才報錯
 _GEO_MIN_DETECTIONS = 2      # 偵測太少顆牙 → 不判斷
 _GEO_WEIGHT         = 0.40   # 幾何分數權重
 _SPEC_WEIGHT        = 0.60   # 專屬模型平均 confidence 權重
+
+# 各視角最低可見牙齒數（低於此 → 開口不足或角度偏差）
+_MIN_TEETH_BY_VIEW: dict[str, int] = {
+    'front':          5,
+    'left_side':      3,
+    'right_side':     3,
+    'upper_occlusal': 4,
+    'lower_occlusal': 4,
+}
 
 # 每個視角對應的專屬 YOLO 模型（left_side 用翻轉圖跑 right 模型）
 _SPEC_MODEL_KEY: dict[str, str] = {
@@ -219,6 +231,32 @@ def _geo_scores(dets: list[dict]) -> dict[str, float]:
     if l_po >= 2:                sl += 0.30
     if n >= 3:                   sl += 0.10
 
+    # ── cx_mean 牙齒重心側向判別（最可靠的左右信號）──────────────────────
+    # 前置相機（app 已標準化方向）：右側照→牙齒偏左(cx<0.5)；左側照→牙齒偏右(cx>0.5)
+    # 資料驗證：left_side cx_mean ≥0.589；right_side cx_mean ≤0.544
+    if cx_mean < 0.45:      # 牙齒明顯偏左 → 強烈右側信號
+        sr += 0.35
+        sl -= 0.35
+    elif cx_mean > 0.58:    # 牙齒明顯偏右 → 強烈左側信號
+        sl += 0.35
+        sr -= 0.35
+
+    # ── 虎牙-門牙座標法（補充判別，當 cx_mean 落在灰色地帶）─────────────
+    # 原理：側面照中，門牙在齒弓前端；cx_mean 無法分辨時，用門牙-虎牙相對位置補強。
+    # 資料驗證：left_side lateral≈+0.20~+0.27；right_side lateral≈-0.08~-0.13
+    incisor_dets = [d for d in dets if d['fdi'] in (11, 21)]
+    canine_dets  = [d for d in dets if d['fdi'] in (13, 23)]
+    if incisor_dets and canine_dets and 0.45 <= cx_mean <= 0.58:
+        i_cx    = sum(d['cx'] for d in incisor_dets) / len(incisor_dets)
+        c_cx    = sum(d['cx'] for d in canine_dets)  / len(canine_dets)
+        lateral = i_cx - c_cx   # >0 → 左側, <0 → 右側
+        if lateral > 0.05:
+            sl += 0.30
+            sr -= 0.15
+        elif lateral < -0.05:
+            sr += 0.30
+            sl -= 0.15
+
     # ── 上顎咬合面 ────────────────────────────────────────────────────────
     su = 0.0
     if n_up / max(n, 1) > 0.65:  su += 0.40
@@ -242,6 +280,20 @@ def _geo_scores(dets: list[dict]) -> dict[str, float]:
         'upper_occlusal': clamp(su),
         'lower_occlusal': clamp(sd),
     }
+
+
+def _check_insufficient_opening(view: str, dets: list[dict]) -> list[PhotoError]:
+    """
+    根據偵測到的牙齒數判斷開口是否足夠。
+    低於各視角門檻 → 提示使用者張口更大或調整角度。
+    """
+    n = len(dets)
+    threshold = _MIN_TEETH_BY_VIEW.get(view, 3)
+    if 0 < n < threshold:
+        view_zh = VIEW_NAMES_ZH.get(view, view)
+        return [PhotoError(view=view, code="insufficient_opening",
+            message=f"{view_zh}：照片中可見牙齒太少（{n} 顆），請張嘴更大或調整拍攝角度")]
+    return []
 
 
 def _cnn_classify(img) -> dict[str, float]:
@@ -303,42 +355,63 @@ def _spec_avg_conf(view: str, img) -> float:
 
 def validate_view_angle(view: str, raw: bytes) -> list[PhotoError]:
     """
-    Layer 2：視角分類。CNN 為主要信號，幾何為備援。
+    Layer 2：視角分類。
 
     決策順序：
-      1. CNN ≥ 0.55 → 直接通過（右側/左側正確照片 CNN~0.77-0.89）
-      2. CNN ≤ 0.25 → 直接報錯（錯誤照片 CNN~0.00-0.02）
-      3. CNN 不確定（0.25-0.55）→ 幾何分析做最終決定
-      4. 無 CNN 模型 → 純幾何
+      1. YOLO 偵測牙齒數 → 開口不足檢查（n 太少直接提示）
+      2. CNN ≥ 0.55 → 通過；CNN ≤ 0.25 → 報錯
+      3. CNN 不確定（0.25-0.55）→ 幾何備援（含虎牙門牙座標法）
     """
     try:
         img = _to_cv2(raw)
         if img is None:
             return []
 
-        # ── Step 1: CNN 主要決策（不依賴 geo_n，解決 geo_n=0 漏判問題）──
-        cnn_probs = _cnn_classify(img)
-        cnn_score = cnn_probs.get(view, -1.0)
-        cnn_top   = max(cnn_probs, key=cnn_probs.get) if cnn_probs else None
+        # ── Step 1: YOLO 偵測（開口檢查 + 幾何備援共用）────────────────
+        front_model = _get_yolo_model("front")
+        r_normal    = front_model.predict(img, verbose=False)[0]
+        dets        = _extract_detections(r_normal, front_model)
 
+        # ── Step 2: 開口不足檢查（優先於角度判斷，直接提示）───────────────
+        # 咬合面視角：front 模型無法可靠計牙數，改用各自專屬模型
+        if view in ('upper_occlusal', 'lower_occlusal'):
+            occ_key   = 'upper' if view == 'upper_occlusal' else 'lower'
+            occ_model = _get_yolo_model(occ_key)
+            r_occ     = occ_model.predict(img, verbose=False)[0]
+            dets_occ  = _extract_detections(r_occ, occ_model)
+            opening_err = _check_insufficient_opening(view, dets_occ)
+        else:
+            opening_err = _check_insufficient_opening(view, dets)
+        if opening_err:
+            n_check = len(dets_occ) if view in ('upper_occlusal', 'lower_occlusal') else len(dets)
+            print(f"[ViewCLF] view={view} n={n_check} → INSUFFICIENT_OPENING", flush=True)
+            return opening_err
+
+        # ── Step 3: CNN 主要決策 ─────────────────────────────────────────
         def make_error(predicted: str) -> list[PhotoError]:
             exp_zh  = VIEW_NAMES_ZH.get(view, view)
             pred_zh = VIEW_NAMES_ZH.get(predicted, predicted)
             return [PhotoError(view=view, code="wrong_angle",
                 message=f"{exp_zh}：這張照片看起來像{pred_zh}，請確認上傳到正確位置")]
 
-        if cnn_score >= 0.55:
-            print(f"[ViewCLF] view={view} cnn={cnn_score:.2f} top={cnn_top} → PASS", flush=True)
-            return []
-        if 0.0 <= cnn_score <= 0.25:
-            print(f"[ViewCLF] view={view} cnn={cnn_score:.2f} top={cnn_top} → FAIL", flush=True)
-            return make_error(cnn_top or view)
+        if _CNN_ENABLED:
+            cnn_probs = _cnn_classify(img)
+            cnn_score = cnn_probs.get(view, -1.0)
+            cnn_top   = max(cnn_probs, key=cnn_probs.get) if cnn_probs else None
 
-        # ── Step 2: CNN 不確定（0.25-0.55）或無模型 → 幾何備援 ──────────
-        front_model = _get_yolo_model("front")
-        r_normal    = front_model.predict(img, verbose=False)[0]
-        dets        = _extract_detections(r_normal, front_model)
+            if cnn_score >= 0.55:
+                print(f"[ViewCLF] view={view} cnn={cnn_score:.2f} top={cnn_top} → PASS", flush=True)
+                return []
+            if 0.0 <= cnn_score <= 0.25:
+                print(f"[ViewCLF] view={view} cnn={cnn_score:.2f} top={cnn_top} → FAIL", flush=True)
+                return make_error(cnn_top or view)
+            cnn_top_fallback = cnn_top
+        else:
+            cnn_score        = -1.0
+            cnn_top_fallback = None
+            print(f"[ViewCLF] view={view} CNN_DISABLED → geo only", flush=True)
 
+        # ── Step 4: CNN 不確定 → 幾何備援（虎牙門牙座標法已整合於 _geo_scores）
         if view == 'left_side':
             r_flip    = front_model.predict(cv2.flip(img, 1), verbose=False)[0]
             dets_flip = _extract_detections(r_flip, front_model)
@@ -358,9 +431,7 @@ def validate_view_angle(view: str, raw: bytes) -> list[PhotoError]:
         best_geo_view  = max(geo, key=lambda k: geo[k])
         best_geo_score = geo[best_geo_view]
         geo_exp        = geo.get(view, 0.0)
-
-        # 錯誤訊息優先用 CNN 預測的視角（更準確），其次用幾何
-        predicted = (cnn_top if cnn_top and cnn_top != view else best_geo_view)
+        predicted      = cnn_top_fallback if cnn_top_fallback and cnn_top_fallback != view else best_geo_view
 
         scores_str = " ".join(f"{k}={v:.2f}" for k, v in geo.items())
         print(
