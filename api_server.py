@@ -449,13 +449,14 @@ async def init_model(
     _uploads = {"front": front, "left_side": left_side, "right_side": right_side,
                 "upper_occlusal": upper_occlusal, "lower_occlusal": lower_occlusal}
 
-    result = validate_uploads(_uploads)
+    _mirror = mirror == "1"
+    result = validate_uploads(_uploads, mirror=_mirror)
     if not result.ok:
         raise HTTPException(status_code=422,
                             detail=[{"view": e.view, "code": e.code, "message": e.message}
                                     for e in result.errors])
 
-    save_uploads(_uploads, _udir / "real_teeth", mirror=mirror == "1")
+    save_uploads(_uploads, _udir / "real_teeth", mirror=_mirror)
 
     task_id = str(uuid.uuid4())[:8]
     analysis_id = None
@@ -490,13 +491,14 @@ async def analyze_plaque(
     _uploads = {"front": front, "left_side": left_side, "right_side": right_side,
                 "upper_occlusal": upper_occlusal, "lower_occlusal": lower_occlusal}
 
-    result = validate_uploads(_uploads)
+    _mirror = mirror == "1"
+    result = validate_uploads(_uploads, mirror=_mirror)
     if not result.ok:
         raise HTTPException(status_code=422,
                             detail=[{"view": e.view, "code": e.code, "message": e.message}
                                     for e in result.errors])
 
-    save_uploads(_uploads, _udir / "real_teeth", mirror=mirror == "1")
+    save_uploads(_uploads, _udir / "real_teeth", mirror=_mirror)
 
     task_id = str(uuid.uuid4())[:8]
     analysis_id = None
