@@ -353,9 +353,12 @@ def _spec_avg_conf(view: str, img) -> float:
     return float(confs.mean())
 
 
-def validate_view_angle(view: str, raw: bytes) -> list[PhotoError]:
+def validate_view_angle(view: str, raw: bytes, mirror: bool = False) -> list[PhotoError]:
     """
     Layer 2：視角分類。
+
+    mirror=True 表示後置鏡頭原始照片（app 尚未翻轉），
+    驗證前先水平翻轉使方向與前置鏡頭一致。
 
     決策順序：
       1. YOLO 偵測牙齒數 → 開口不足檢查（n 太少直接提示）
@@ -366,6 +369,8 @@ def validate_view_angle(view: str, raw: bytes) -> list[PhotoError]:
         img = _to_cv2(raw)
         if img is None:
             return []
+        if mirror:
+            img = cv2.flip(img, 1)
 
         # ── Step 1: YOLO 偵測（開口檢查 + 幾何備援共用）────────────────
         front_model = _get_yolo_model("front")
@@ -399,12 +404,28 @@ def validate_view_angle(view: str, raw: bytes) -> list[PhotoError]:
             cnn_score = cnn_probs.get(view, -1.0)
             cnn_top   = max(cnn_probs, key=cnn_probs.get) if cnn_probs else None
 
-            if cnn_score >= 0.55:
+            # 左右側視角：CNN 對方向較不敏感，拉大幾何備援區間讓 cx_mean 多參與
+            # 其他視角：維持原本嚴格門檻
+            is_side = view in ('left_side', 'right_side')
+            pass_thresh = 0.65 if is_side else 0.55
+            fail_thresh = 0.15 if is_side else 0.25
+
+            if cnn_score >= pass_thresh:
                 print(f"[ViewCLF] view={view} cnn={cnn_score:.2f} top={cnn_top} → PASS", flush=True)
                 return []
-            if 0.0 <= cnn_score <= 0.25:
-                print(f"[ViewCLF] view={view} cnn={cnn_score:.2f} top={cnn_top} → FAIL", flush=True)
-                return make_error(cnn_top or view)
+            if 0.0 <= cnn_score <= fail_thresh:
+                if is_side:
+                    # 左右側視角：先排除對向側高信心（此時一定是傳錯照片）
+                    opposite = 'right_side' if view == 'left_side' else 'left_side'
+                    cnn_opp = cnn_probs.get(opposite, 0.0)
+                    if cnn_opp >= pass_thresh:
+                        print(f"[ViewCLF] view={view} cnn={cnn_score:.2f} {opposite}={cnn_opp:.2f} → FAIL", flush=True)
+                        return make_error(opposite)
+                    # CNN 不確定方向（top 為正面/其他）→ 交幾何備援
+                    print(f"[ViewCLF] view={view} cnn={cnn_score:.2f} {opposite}={cnn_opp:.2f} → side geo fallback", flush=True)
+                else:
+                    print(f"[ViewCLF] view={view} cnn={cnn_score:.2f} top={cnn_top} → FAIL", flush=True)
+                    return make_error(cnn_top or view)
             cnn_top_fallback = cnn_top
         else:
             cnn_score        = -1.0
@@ -465,12 +486,14 @@ def validate_view_angle(view: str, raw: bytes) -> list[PhotoError]:
 def validate_uploads(
     uploads: dict,
     *,
+    mirror: bool = False,
     skip_angle_check: bool = False,
 ) -> ValidationResult:
     """
     驗證所有視角照片。
 
     uploads: {"front": UploadFile, "left_side": UploadFile, ...}
+    mirror:  True = 後置鏡頭（app 尚未翻轉），驗證前先水平翻轉
     回傳 ValidationResult；呼叫端在 save_uploads 之前執行，
     result.ok == False 時應回傳 HTTP 422。
 
@@ -490,6 +513,6 @@ def validate_uploads(
 
         # Layer 2：只在 Layer 1 通過時才跑，節省時間
         if not q_errors and not skip_angle_check:
-            all_errors.extend(validate_view_angle(view, raw))
+            all_errors.extend(validate_view_angle(view, raw, mirror=mirror))
 
     return ValidationResult(ok=len(all_errors) == 0, errors=all_errors)
