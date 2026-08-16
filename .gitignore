@@ -14,3 +14,8 @@ teeth_color_test/
 color_test/
 api_tasks/
 view_clf_data/
+
+# 螢光菌斑測試：照片與輸出只留本地，不上 git
+real_color_translet/
+fluorescence_test/output/
+fluorescence_test/annotated/
