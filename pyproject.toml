@@ -9,14 +9,21 @@ requires-python = ">=3.10,<3.11"
 
 
 dependencies = [
-    "numpy<2",
+    # numpy 2 是實際運行的版本：cv2 5.x / torch 2.9 / open3d 0.19 都是 numpy 2 時代的
+    # 套件，降回 1.x 會把它們一起弄壞。原本宣告的 numpy<2 已與現實不符。
+    "numpy>=2,<3",
     "opencv-python>=4.11.0.86",
     "open-clip-torch>=2.24.0",
     "Pillow>=10.0.0",
     "segment-anything-hq>=0.3",
-    "timm>=0.9.2,<1",
+    "timm>=1.0",
     "torch>=2.7.0",
     "torchvision>=0.22.0",
+    # trimesh 先前未宣告，但有 9 支腳本 import 它。
+    # 下限 4.4：4.0.5 用了 ndarray.ptp()，在 numpy 2 會 AttributeError，3D 建模全掛。
+    # 上限 <4.7：4.12 移除了 remove_degenerate_faces / remove_duplicate_faces，
+    #            create_personalized_3d_real.py 還在用。
+    "trimesh>=4.4,<4.7",
     "ultralytics>=8.3.116",
 ]
 
