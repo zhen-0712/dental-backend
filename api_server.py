@@ -311,7 +311,16 @@ def run_init_pipeline(task_id: str, analysis_id: int, user_id: int):
 
 # ==================== 菌斑分析流程 ====================
 
-def run_plaque_pipeline(task_id: str, analysis_id: int, user_id: int, model_type: str = "regular"):
+def run_plaque_pipeline(task_id: str, analysis_id: int, user_id: int,
+                        model_type: str = "regular", light_mode: str = "dye"):
+    """
+    light_mode:
+        "dye"          染色劑模式 → teeth_test.py（原有流程，預設）
+        "fluorescence" 紫光燈模式 → teeth_test_fluorescence.py（405nm 螢光解混）
+
+    兩者只差偵測那一步，輸出的 mask 格式相同，
+    因此 extract_plaque_regions / project_plaque_by_fdi 完全共用。
+    """
     db = next(get_db())
     analysis = db.query(Analysis).filter(Analysis.id == analysis_id).first() if analysis_id else None
     udir = user_data_dir(user_id) if user_id else BASE
@@ -333,8 +342,10 @@ def run_plaque_pipeline(task_id: str, analysis_id: int, user_id: int, model_type
         if not ok: raise Exception(f"preprocess failed:\n{err}")
 
         tasks[task_id]["step"] = "detecting_plaque"
-        ok, err = run_script("teeth_test.py", udir, model_type)
-        if not ok: raise Exception(f"teeth_test failed:\n{err}")
+        _detect_script = ("teeth_test_fluorescence.py" if light_mode == "fluorescence"
+                          else "teeth_test.py")
+        ok, err = run_script(_detect_script, udir, model_type)
+        if not ok: raise Exception(f"{_detect_script} failed:\n{err}")
 
         tasks[task_id]["step"] = "extracting_regions"
         ok, err = run_script("extract_plaque_regions.py", udir, model_type)
@@ -376,6 +387,7 @@ def run_plaque_pipeline(task_id: str, analysis_id: int, user_id: int, model_type
             "stats":          stats,
             "tooth_analysis": tooth_json,
             "model_source":   model_type,
+            "light_mode":     light_mode,
         }
 
         if analysis:
@@ -484,6 +496,7 @@ async def analyze_plaque(
     lower_occlusal:   UploadFile = File(...),
     mirror:           str = Form("0"),
     model_type:       str = Form("regular"),   # "regular" | "teaching"
+    light_mode:       str = Form("dye"),       # "dye" | "fluorescence"
     user: User | None = Depends(get_current_user_optional),
     db:   Session     = Depends(get_db),
 ):
@@ -492,11 +505,16 @@ async def analyze_plaque(
                 "upper_occlusal": upper_occlusal, "lower_occlusal": lower_occlusal}
 
     _mirror = mirror == "1"
-    result = validate_uploads(_uploads, mirror=_mirror)
-    if not result.ok:
-        raise HTTPException(status_code=422,
-                            detail=[{"view": e.view, "code": e.code, "message": e.message}
-                                    for e in result.errors])
+    _lmode  = light_mode if light_mode in ("dye", "fluorescence") else "dye"
+
+    # 紫光燈模式跳過自動視角驗證：photo_validator 的視角分類器是用白光照片訓練的，
+    # 405nm 照片的色彩分布差太多會被誤判成角度錯誤。染色劑模式維持原本驗證不變。
+    if _lmode == "dye":
+        result = validate_uploads(_uploads, mirror=_mirror)
+        if not result.ok:
+            raise HTTPException(status_code=422,
+                                detail=[{"view": e.view, "code": e.code, "message": e.message}
+                                        for e in result.errors])
 
     save_uploads(_uploads, _udir / "real_teeth", mirror=_mirror)
 
@@ -514,8 +532,8 @@ async def analyze_plaque(
     _uid = user.id if user else None
     tasks[task_id] = {"status": "queued", "step": "waiting", "type": "plaque",
                       "analysis_id": analysis_id}
-    background_tasks.add_task(run_plaque_pipeline, task_id, analysis_id, _uid, _mtype)
-    return {"task_id": task_id, "status": "queued", "type": "plaque"}
+    background_tasks.add_task(run_plaque_pipeline, task_id, analysis_id, _uid, _mtype, _lmode)
+    return {"task_id": task_id, "status": "queued", "type": "plaque", "light_mode": _lmode}
 
 
 @app.post("/init_multi")
