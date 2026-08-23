@@ -20,3 +20,9 @@ real_color_translet/
 fluorescence_test/output/
 fluorescence_test/annotated/*
 !fluorescence_test/annotated/*.json
+
+# 染色劑（真實牙齒）測試照片：同樣只留標註座標
+real_color/*
+!real_color/annotated
+real_color/annotated/*
+!real_color/annotated/*.json
