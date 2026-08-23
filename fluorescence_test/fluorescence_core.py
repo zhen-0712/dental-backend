@@ -64,6 +64,15 @@ DEFAULT_CONFIG = {
     "violet_guard_max": 1.25,     # 原圖 B/G 超過此值視為紫光污染 → 排除
     "specular_v_min": 245,        # 高光排除：V ≥ 此值且 S ≤ specular_s_max
     "specular_s_max": 60,
+    # ---- 影像層級閘門 ----
+    # MAD 自適應門檻是純相對的，永遠會標出每張圖最紅的前幾 %，
+    # 即使那張圖根本沒有菌斑。加一道絕對判準：整張影像牙齒區域的
+    # fp/fe 第 90 百分位若低於門檻，直接判定「這張圖沒有菌斑」。
+    # fp/fe 是曝光無關的比值（實測 29 張的 fe 變異 CV 僅 12%），
+    # 因此這個絕對值可跨影像比較。設為 0 可停用。
+    "image_gate_pct": 90,
+    "image_gate_min": 0.12,
+
     "plaque_min_area_ratio": 6e-5,  # 菌斑最小面積（佔全圖比例）
     "plaque_open_ratio": 0.004,   # 菌斑 mask 開運算核
 }
@@ -267,7 +276,31 @@ def detect(img_bgr, cfg=None):
     P = np.array(cfg["plaque_endmember"], dtype=np.float32)
 
     smooth = cv2.GaussianBlur(work, (0, 0), cfg["pre_blur_sigma"]).astype(np.float32)
-    _, _, fp = unmix(smooth, V, E, P)
+    _, fe, fp = unmix(smooth, V, E, P)
+
+    # ---- 影像層級閘門 ----
+    inside = tooth > 0
+    gate_val = float(np.percentile((fp / np.maximum(fe, 1.0))[inside],
+                                   cfg["image_gate_pct"]))
+    if cfg["image_gate_min"] > 0 and gate_val < cfg["image_gate_min"]:
+        empty = np.zeros((h, w), np.uint8)
+        return {
+            "plaque_mask": empty, "tooth_mask": tooth,
+            "fp": fp, "z": np.zeros((h, w), np.float32),
+            "work_size": (w, h), "scale": scale,
+            "info": {
+                "excitation_endmember_bgr": [round(float(x), 4) for x in V],
+                "excitation_fallback_used": bool(v_fallback),
+                "enamel_endmember_bgr": [round(float(x), 4) for x in E],
+                "tooth_threshold_g": round(g_thr, 1),
+                "tooth_px": int(inside.sum()),
+                "plaque_px": 0, "plaque_ratio_of_tooth": 0.0,
+                "image_gate_value": round(gate_val, 4),
+                "image_gate_min": cfg["image_gate_min"],
+                "image_gate_triggered": True,
+                "regions": [],
+            },
+        }
 
     win = odd(long_side * cfg["local_win_ratio"])
     resid = local_residual(fp, tooth, win)
@@ -286,6 +319,9 @@ def detect(img_bgr, cfg=None):
             "plaque_px": int((plaque > 0).sum()),
             "plaque_ratio_of_tooth": round(int((plaque > 0).sum()) / tooth_px, 4),
             "local_window_px": win,
+            "image_gate_value": round(gate_val, 4),
+            "image_gate_min": cfg["image_gate_min"],
+            "image_gate_triggered": False,
             **st,
             "regions": regions,
         },

@@ -200,15 +200,26 @@ def process(path: Path, cfg: dict):
     P = np.array(cfg["plaque_endmember"], dtype=np.float32)
     print(f"  端元 (B,G,R)  激發光 V={V.round(3)}  琺瑯質 E={E.round(3)}")
 
-    _, _, fp = unmix(smooth, V, E, P)
+    _, fe, fp = unmix(smooth, V, E, P)
+
+    # 影像層級閘門：整張圖的 fp/fe 太低就判定「這張沒有菌斑」
+    gate_val = float(np.percentile((fp / np.maximum(fe, 1.0))[tooth > 0],
+                                   cfg["image_gate_pct"]))
+    gated = cfg["image_gate_min"] > 0 and gate_val < cfg["image_gate_min"]
 
     # Stage 3
     win = _odd(long_side * cfg["local_win_ratio"])
     resid = local_residual(fp, tooth, win)
     plaque, z, regions, st = adaptive_plaque_mask(fp, resid, tooth, orig, cfg, long_side)
+    if gated:
+        plaque = np.zeros_like(plaque)
+        regions = []
     n_px = int((plaque > 0).sum())
     print(f"  局部視窗={win}px  fp 中位數={st['fp_median_in_tooth']} "
           f"殘差 MAD={st['residual_mad']}")
+    print(f"  影像閘門 p{cfg['image_gate_pct']}(fp/fe)={gate_val:.3f} "
+          f"(門檻 {cfg['image_gate_min']})"
+          + ("  🚫 判定為無菌斑，輸出空結果" if gated else "  ✅ 通過"))
     print(f"  菌斑: {n_px:,} px，佔牙齒面積 {n_px / tooth_px * 100:.1f}%，"
           f"{len(regions)} 個區塊")
 
@@ -256,6 +267,8 @@ def process(path: Path, cfg: dict):
         "tooth_px": tooth_px,
         "plaque_px": n_px,
         "plaque_ratio_of_tooth": round(n_px / tooth_px, 4),
+        "image_gate_value": round(gate_val, 4),
+        "image_gate_triggered": bool(gated),
         "reference_point_hits": hits,
         "reference_point_z": zs,
         "regions_matched": matched,
@@ -269,6 +282,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("images", nargs="*", help="影像路徑（預設跑 real_color_translet/ 全部）")
     ap.add_argument("--z", type=float, help="z-score 門檻（越低越靈敏）")
+    ap.add_argument("--gate", type=float,
+                    help="影像層級閘門 p90(fp/fe) 下限，設 0 停用")
     ap.add_argument("--fp-rel", type=float, help="fp 相對下限倍數")
     ap.add_argument("--win", type=float, help="局部視窗比例，如 0.061")
     ap.add_argument("--no-panel", action="store_true", help="不輸出 debug 面板")
@@ -277,6 +292,8 @@ def main():
     cfg = dict(CONFIG)
     if args.z is not None:
         cfg["z_thresh"] = args.z
+    if args.gate is not None:
+        cfg["image_gate_min"] = args.gate
     if args.fp_rel is not None:
         cfg["fp_rel_min"] = args.fp_rel
     if args.win is not None:
