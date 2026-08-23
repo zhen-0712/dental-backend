@@ -49,6 +49,20 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import fluorescence_core as fc
+
+# 演算法全部委派給 core，本檔只負責 CLI、標註評估與繪圖
+load_and_scale        = lambda p, n: fc.scale_to_working(cv2.imread(str(p)), n)
+estimate_excitation   = fc.estimate_excitation
+estimate_enamel       = fc.estimate_enamel
+unmix                 = fc.unmix
+tooth_mask_from_green = fc.tooth_mask_from_green
+local_residual        = fc.local_residual
+adaptive_plaque_mask  = fc.adaptive_plaque_mask
+_ellipse              = fc.ellipse
+_odd                  = fc.odd
+
 # ==================================================================
 # 路徑（唯讀既有資料夾，只寫入自己的 output/）
 # ==================================================================
@@ -59,39 +73,11 @@ OUTPUT_DIR = HERE / "output"
 # ==================================================================
 # 可調參數 —— 所有魔術數字集中在這裡
 # ==================================================================
+# 演算法參數一律以 fluorescence_core.DEFAULT_CONFIG 為準，
+# 這裡只覆寫離線測試專屬的項目，避免兩邊參數漂移。
 CONFIG = {
-    # ---- Stage 0: 工作解析度 ----
-    "work_long_side": 1000,       # 處理時縮到長邊 N px（原圖 2880 慢且雜訊多）
-    "pre_blur_sigma": 2.0,        # 解混前的輕微高斯，壓感測器雜訊
-
-    # ---- Stage 1: 端元估計 ----
-    "excite_sample_pct": 20,      # 取 G 最低的前 N% 像素估計激發光 V
-    "enamel_sample_pct": 10,      # 取牙齒內 a* 最低（最綠）的前 N% 估計 E
-    "plaque_endmember": [0.0, 0.0, 1.0],   # P：紅色螢光 (B,G,R)
-
-    # ---- Stage 2: 牙齒 ROI（綠色自體螢光）----
-    "tooth_g_min_abs": 45,        # G 絕對下限，擋純暗背景
-    "tooth_otsu_scale": 0.85,     # Otsu 門檻 × 此係數
-    "tooth_bg_max": 1.00,         # B/G 上限：只有牙齒的綠色自體螢光會壓過藍色
-    "tooth_rg_max": 1.60,         # R/G 上限：排除舌頭、嘴唇、手指等偏紅組織
-    "tooth_min_area_ratio": 3e-4, # 小於全圖此比例的連通域丟掉
-    "tooth_close_ratio": 0.012,   # 形態學閉運算核 = long_side × ratio
-    "tooth_erode_ratio": 0.004,   # 往內縮一點（解混已處理邊緣，不需縮太多）
-
-    # ---- Stage 3: 菌斑判定 ----
-    "local_win_ratio": 0.061,     # 局部背景視窗 = long_side × ratio（≈一顆牙寬）
-    "z_thresh": 2.0,              # 局部殘差 / MAD 的門檻（2.5 保守 / 2.0 平衡 / 1.6 靈敏）
-    "fp_rel_min": 1.5,            # fp 至少要是該影像牙齒 fp 中位數的幾倍
-    "violet_guard_max": 1.25,     # 原圖 B/G 超過此值視為紫光污染 → 排除
-    "specular_v_min": 245,        # 高光排除：V ≥ 此值且 S ≤ specular_s_max
-    "specular_s_max": 60,
-    "plaque_min_area_ratio": 6e-5,  # 菌斑最小面積（佔全圖比例）
-    "plaque_open_ratio": 0.004,   # 菌斑 mask 開運算核
-
-    # ---- 評估 ----
+    **fc.DEFAULT_CONFIG,
     "ref_tolerance_ratio": 0.05,  # 標註點命中容差半徑 = 長邊 × 此比例
-
-    # ---- Stage 4: 輸出 ----
     "save_debug_panel": True,
 }
 
@@ -99,25 +85,34 @@ CONFIG = {
 # 來源 annotated/reference_points.json（extract_annotations.py 產出，像素級）
 # 或 annotated/manual_points.json（目測抄錄，誤差較大）。前者優先。
 def load_reference_points():
-    for fn in ("reference_points.json", "manual_points.json"):
+    """
+    合併兩個來源，reference_points.json（程式抽取，像素級）優先覆蓋
+    manual_points.json（目測抄錄，誤差較大）。這樣舊批次的標註不會因為
+    新批次改用程式抽取而消失。
+    """
+    out, src = {}, []
+    for fn in ("manual_points.json", "reference_points.json"):
         p = HERE / "annotated" / fn
         if not p.exists():
             continue
         raw = json.loads(p.read_text(encoding="utf-8"))
-        out = {}
+        cnt = 0
         for k, v in raw.items():
             if k.startswith("_"):
                 continue
             marks = v.get("marks", [])
-            if marks and isinstance(marks[0], dict):        # extract_annotations 格式
+            if marks and isinstance(marks[0], dict):
                 out[k] = [m["bbox_center_norm"] for m in marks]
-            else:                                            # manual 格式
+            else:
                 out[k] = [list(m) for m in marks]
-        print(f"📌 標註來源: annotated/{fn}（{len(out)} 張，"
-              f"{sum(len(v) for v in out.values())} 個點）")
-        return out
-    print("⚠️  annotated/ 沒有標註檔，跳過命中率評估")
-    return {}
+            cnt += 1
+        src.append(f"{fn}({cnt} 張)")
+    if src:
+        print(f"📌 標註來源: {' + '.join(src)} → 共 {len(out)} 張、"
+              f"{sum(len(v) for v in out.values())} 個點")
+    else:
+        print("⚠️  annotated/ 沒有標註檔，跳過命中率評估")
+    return out
 
 
 REFERENCE_POINTS = load_reference_points()
@@ -126,165 +121,15 @@ REFERENCE_POINTS = load_reference_points()
 # ==================================================================
 # Stage 0
 # ==================================================================
-def load_and_scale(path: Path, long_side: int):
-    img = cv2.imread(str(path))
-    if img is None:
-        raise FileNotFoundError(f"讀不到影像: {path}")
-    h, w = img.shape[:2]
-    scale = long_side / max(h, w)
-    return cv2.resize(img, (round(w * scale), round(h * scale)),
-                      interpolation=cv2.INTER_AREA), scale
-
-
-def _ellipse(size_f):
-    s = max(3, int(round(size_f)) | 1)            # 保證奇數且 ≥ 3
-    return cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (s, s))
-
-
-def _odd(size_f):
-    return max(3, int(round(size_f)) | 1)
-
-
 # ==================================================================
 # Stage 1: 端元估計
 # ==================================================================
-def estimate_excitation(img_bgr, sample_pct):
-    """
-    405nm 激發光是反射光，本身幾乎不含綠色分量，
-    所以取 G 最低的一群像素（背景黏膜、口腔深處）的平均色即為其方向。
-    """
-    b, g, r = cv2.split(img_bgr.astype(np.float32))
-    thr = np.percentile(g, sample_pct)
-    sel = (g <= thr) & (b + g + r > 30)           # 排除全黑
-    if sel.sum() < 100:
-        sel = g <= np.percentile(g, 50)
-    v = np.array([b[sel].mean(), g[sel].mean(), r[sel].mean()], dtype=np.float32)
-    return v / (v.max() + 1e-6)
-
-
-def estimate_enamel(img_bgr, tooth_mask, sample_pct):
-    """牙齒 ROI 內 a* 最低（最綠、最乾淨）的像素平均色 = 琺瑯質自體螢光端元。"""
-    a = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2LAB)[:, :, 1].astype(np.float32)
-    inside = tooth_mask > 0
-    if inside.sum() < 100:
-        return np.array([0.85, 1.0, 1.0], dtype=np.float32)
-    sel = inside & (a <= np.percentile(a[inside], sample_pct))
-    e = img_bgr.astype(np.float32)[sel].mean(0)
-    return (e / (e.max() + 1e-6)).astype(np.float32)
-
-
-def unmix(img_f32, V, E, P):
-    """
-    解 M @ [a, fe, fp] = observed，M 的三個 column 分別是 V / E / P。
-    回傳 (a, fe, fp)，其中 fp 就是紅色螢光豐度 = 菌斑強度。
-    """
-    M = np.stack([V, E, P], axis=1)
-    if abs(np.linalg.det(M)) < 1e-6:
-        raise ValueError("端元向量接近共線，無法解混")
-    f = np.einsum('ij,hwj->hwi', np.linalg.inv(M), img_f32)
-    return f[..., 0], f[..., 1], np.clip(f[..., 2], 0, None)
-
-
 # ==================================================================
 # Stage 2: 牙齒 ROI（綠色自體螢光）
 # ==================================================================
-def tooth_mask_from_green(img_bgr, cfg, long_side):
-    """
-    405nm 下琺瑯質有很強的綠色自體螢光，軟組織幾乎沒有。
-    G 通道單獨就能把整排牙齒切出來，在這種暗場照片上比 YOLO/SAM 更穩。
-    """
-    blur = cv2.GaussianBlur(img_bgr, (0, 0), max(1.0, long_side * 0.004))
-    b, g_blur, r = cv2.split(blur.astype(np.float32))
-
-    otsu_t, _ = cv2.threshold(g_blur.astype(np.uint8), 0, 255,
-                              cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    thr = max(cfg["tooth_g_min_abs"], otsu_t * cfg["tooth_otsu_scale"])
-
-    # 只靠 G 亮度不夠：有環境光時手術鋪單、舌頭、嘴唇、手指的 G 也很高。
-    # 實測只有牙齒的綠色自體螢光會壓過藍色（B/G≈0.76~0.84），
-    # 鋪單 1.36~1.72、舌頭 1.87~3.08、手指 1.85，用比值一刀切乾淨。
-    mask = ((g_blur >= thr) &
-            (b / (g_blur + 1.0) < cfg["tooth_bg_max"]) &
-            (r / (g_blur + 1.0) < cfg["tooth_rg_max"])).astype(np.uint8) * 255
-
-    k_close = _ellipse(long_side * cfg["tooth_close_ratio"])
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, k_close)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, k_close)
-
-    # 丟掉太小的連通域（反光燈珠、雜點）
-    n, labels, stats, _ = cv2.connectedComponentsWithStats(mask, 8)
-    min_area = mask.size * cfg["tooth_min_area_ratio"]
-    keep = np.array([False] + [stats[i, cv2.CC_STAT_AREA] >= min_area
-                               for i in range(1, n)])
-    mask = np.where(keep[labels], 255, 0).astype(np.uint8)
-
-    mask = cv2.erode(mask, _ellipse(long_side * cfg["tooth_erode_ratio"]))
-    return mask, float(thr)
-
-
 # ==================================================================
 # Stage 3: 局部背景相減 + MAD 自適應門檻
 # ==================================================================
-def local_residual(fp, tooth_mask, win):
-    """
-    只用牙齒內的像素做局部平均（normalized box filter），
-    再相減。消除左右照明梯度，也避免牙齒外的黑色背景把平均拉低。
-    """
-    m = (tooth_mask > 0).astype(np.float32)
-    num = cv2.boxFilter(fp * m, -1, (win, win), normalize=False)
-    den = cv2.boxFilter(m, -1, (win, win), normalize=False)
-    return fp - num / (den + 1e-3)
-
-
-def adaptive_plaque_mask(fp, residual, tooth_mask, orig_bgr, cfg, long_side):
-    inside = tooth_mask > 0
-    rv = residual[inside]
-    med_r = float(np.median(rv))
-    mad = float(np.median(np.abs(rv - med_r))) * 1.4826
-    mad = max(mad, 0.5)
-    z = (residual - med_r) / mad
-
-    fp_med = float(np.median(fp[inside]))
-    fp_floor = fp_med * cfg["fp_rel_min"]
-
-    raw = (inside & (z >= cfg["z_thresh"]) & (fp >= fp_floor)).astype(np.uint8) * 255
-
-    # --- 排除項：紫光污染 + 鏡面高光 ---
-    b, g, _ = cv2.split(orig_bgr.astype(np.float32))
-    violet = (b / (g + 1.0)) > cfg["violet_guard_max"]
-    hsv = cv2.cvtColor(orig_bgr, cv2.COLOR_BGR2HSV)
-    specular = ((hsv[:, :, 2] >= cfg["specular_v_min"]) &
-                (hsv[:, :, 1] <= cfg["specular_s_max"]))
-    raw[violet | specular] = 0
-
-    # --- 形態學 + 最小面積 ---
-    k = _ellipse(long_side * cfg["plaque_open_ratio"])
-    clean = cv2.morphologyEx(raw, cv2.MORPH_OPEN, k)
-    clean = cv2.morphologyEx(clean, cv2.MORPH_CLOSE, k)
-
-    n, labels, stats, cents = cv2.connectedComponentsWithStats(clean, 8)
-    min_area = clean.size * cfg["plaque_min_area_ratio"]
-    keep = np.array([False] + [stats[i, cv2.CC_STAT_AREA] >= min_area
-                               for i in range(1, n)])
-    final = np.where(keep[labels], 255, 0).astype(np.uint8)
-
-    regions = [{
-        "id": int(i),
-        "area_px": int(stats[i, cv2.CC_STAT_AREA]),
-        "centroid": [round(float(cents[i][0]), 1), round(float(cents[i][1]), 1)],
-        "bbox": [int(stats[i, cv2.CC_STAT_LEFT]), int(stats[i, cv2.CC_STAT_TOP]),
-                 int(stats[i, cv2.CC_STAT_WIDTH]), int(stats[i, cv2.CC_STAT_HEIGHT])],
-        "fp_mean": round(float(fp[labels == i].mean()), 2),
-        "z_max": round(float(z[labels == i].max()), 2),
-    } for i in range(1, n) if keep[i]]
-    regions.sort(key=lambda r: -r["area_px"])
-
-    stats_out = {"fp_median_in_tooth": round(fp_med, 2),
-                 "fp_floor": round(fp_floor, 2),
-                 "residual_mad": round(mad, 3)}
-    return final, z, regions, stats_out
-
-
 # ==================================================================
 # Stage 4: 輸出
 # ==================================================================
@@ -350,20 +195,31 @@ def process(path: Path, cfg: dict):
         return None
 
     # Stage 1
-    V = estimate_excitation(orig, cfg["excite_sample_pct"])
+    V, _ = estimate_excitation(orig, cfg)
     E = estimate_enamel(orig, tooth, cfg["enamel_sample_pct"])
     P = np.array(cfg["plaque_endmember"], dtype=np.float32)
     print(f"  端元 (B,G,R)  激發光 V={V.round(3)}  琺瑯質 E={E.round(3)}")
 
-    _, _, fp = unmix(smooth, V, E, P)
+    _, fe, fp = unmix(smooth, V, E, P)
+
+    # 影像層級閘門：整張圖的 fp/fe 太低就判定「這張沒有菌斑」
+    gate_val = float(np.percentile((fp / np.maximum(fe, 1.0))[tooth > 0],
+                                   cfg["image_gate_pct"]))
+    gated = cfg["image_gate_min"] > 0 and gate_val < cfg["image_gate_min"]
 
     # Stage 3
     win = _odd(long_side * cfg["local_win_ratio"])
     resid = local_residual(fp, tooth, win)
     plaque, z, regions, st = adaptive_plaque_mask(fp, resid, tooth, orig, cfg, long_side)
+    if gated:
+        plaque = np.zeros_like(plaque)
+        regions = []
     n_px = int((plaque > 0).sum())
     print(f"  局部視窗={win}px  fp 中位數={st['fp_median_in_tooth']} "
           f"殘差 MAD={st['residual_mad']}")
+    print(f"  影像閘門 p{cfg['image_gate_pct']}(fp/fe)={gate_val:.3f} "
+          f"(門檻 {cfg['image_gate_min']})"
+          + ("  🚫 判定為無菌斑，輸出空結果" if gated else "  ✅ 通過"))
     print(f"  菌斑: {n_px:,} px，佔牙齒面積 {n_px / tooth_px * 100:.1f}%，"
           f"{len(regions)} 個區塊")
 
@@ -376,9 +232,22 @@ def process(path: Path, cfg: dict):
         win_m = plaque[max(0, y - tol):y + tol + 1, max(0, x - tol):x + tol + 1]
         hits.append(bool((win_m > 0).any()))
         zs.append(round(float(z[max(0, y - 4):y + 5, max(0, x - 4):x + 5].mean()), 2))
+
+    # 區塊層級 precision：每個偵測區塊的質心是否落在任一標註的容差內。
+    # 像素級 IoU 需要全圖標註成本太高，區塊層級也更貼近實際用途
+    #（醫師在意的是「有沒有指對牙」而不是輪廓精確度）。
+    matched = 0
+    for r in regions:
+        cx, cy = r["centroid"]
+        if any((cx - x) ** 2 + (cy - y) ** 2 <= tol ** 2 for x, y in ref_s):
+            matched += 1
+    n_reg = len(regions)
+    precision = round(matched / n_reg, 3) if n_reg else None
     if ref:
-        print(f"  🎯 標註點命中 {sum(hits)}/{len(hits)}（容差 {tol}px）  "
-              f"{''.join('✅' if s else '❌' for s in hits)}")
+        print(f"  🎯 recall {sum(hits)}/{len(hits)}（容差 {tol}px）"
+              f" {''.join('✅' if s else '❌' for s in hits)}"
+              f"   precision {matched}/{n_reg}"
+              + (f" = {precision:.0%}" if precision is not None else ""))
 
     # Stage 4
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -398,8 +267,12 @@ def process(path: Path, cfg: dict):
         "tooth_px": tooth_px,
         "plaque_px": n_px,
         "plaque_ratio_of_tooth": round(n_px / tooth_px, 4),
+        "image_gate_value": round(gate_val, 4),
+        "image_gate_triggered": bool(gated),
         "reference_point_hits": hits,
         "reference_point_z": zs,
+        "regions_matched": matched,
+        "region_precision": precision,
         **st,
         "regions": regions,
     }
@@ -409,6 +282,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("images", nargs="*", help="影像路徑（預設跑 real_color_translet/ 全部）")
     ap.add_argument("--z", type=float, help="z-score 門檻（越低越靈敏）")
+    ap.add_argument("--gate", type=float,
+                    help="影像層級閘門 p90(fp/fe) 下限，設 0 停用")
     ap.add_argument("--fp-rel", type=float, help="fp 相對下限倍數")
     ap.add_argument("--win", type=float, help="局部視窗比例，如 0.061")
     ap.add_argument("--no-panel", action="store_true", help="不輸出 debug 面板")
@@ -417,6 +292,8 @@ def main():
     cfg = dict(CONFIG)
     if args.z is not None:
         cfg["z_thresh"] = args.z
+    if args.gate is not None:
+        cfg["image_gate_min"] = args.gate
     if args.fp_rel is not None:
         cfg["fp_rel_min"] = args.fp_rel
     if args.win is not None:
