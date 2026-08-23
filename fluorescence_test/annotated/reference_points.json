@@ -34,13 +34,13 @@
           0.6196
         ],
         "bbox_norm": [
-          0.5073,
-          0.6102,
-          0.0291,
-          0.0187
+          0.5059,
+          0.6092,
+          0.0319,
+          0.0208
         ],
-        "radius_norm": 0.0109,
-        "stroke_area_px": 122
+        "radius_norm": 0.012,
+        "stroke_area_px": 312
       },
       {
         "bbox_center_norm": [
@@ -48,13 +48,13 @@
           0.6326
         ],
         "bbox_norm": [
-          0.4089,
-          0.6154,
-          0.0541,
-          0.0343
+          0.4075,
+          0.6144,
+          0.0568,
+          0.0364
         ],
-        "radius_norm": 0.0203,
-        "stroke_area_px": 257
+        "radius_norm": 0.0213,
+        "stroke_area_px": 547
       }
     ]
   },
@@ -78,13 +78,13 @@
           0.4305
         ],
         "bbox_norm": [
-          0.2413,
-          0.4156,
-          0.0165,
-          0.0299
+          0.24,
+          0.4146,
+          0.0193,
+          0.032
         ],
-        "radius_norm": 0.015,
-        "stroke_area_px": 147
+        "radius_norm": 0.016,
+        "stroke_area_px": 305
       }
     ]
   },
@@ -104,31 +104,17 @@
     "marks": [
       {
         "bbox_center_norm": [
-          0.6488,
-          0.4391
-        ],
-        "bbox_norm": [
-          0.6287,
-          0.4204,
-          0.0401,
-          0.0373
-        ],
-        "radius_norm": 0.0187,
-        "stroke_area_px": 173
-      },
-      {
-        "bbox_center_norm": [
-          0.6903,
+          0.6689,
           0.4479
         ],
         "bbox_norm": [
-          0.6716,
-          0.4173,
-          0.0374,
-          0.0612
+          0.6274,
+          0.4162,
+          0.083,
+          0.0633
         ],
-        "radius_norm": 0.0306,
-        "stroke_area_px": 257
+        "radius_norm": 0.0316,
+        "stroke_area_px": 1115
       },
       {
         "bbox_center_norm": [
@@ -136,13 +122,13 @@
           0.4629
         ],
         "bbox_norm": [
-          0.5595,
-          0.4411,
-          0.0249,
-          0.0435
+          0.5582,
+          0.4401,
+          0.0277,
+          0.0456
         ],
-        "radius_norm": 0.0218,
-        "stroke_area_px": 182
+        "radius_norm": 0.0228,
+        "stroke_area_px": 560
       },
       {
         "bbox_center_norm": [
@@ -150,13 +136,13 @@
           0.479
         ],
         "bbox_norm": [
-          0.453,
-          0.4588,
-          0.0429,
-          0.0404
+          0.4516,
+          0.4577,
+          0.0457,
+          0.0425
         ],
-        "radius_norm": 0.0202,
-        "stroke_area_px": 160
+        "radius_norm": 0.0213,
+        "stroke_area_px": 418
       },
       {
         "bbox_center_norm": [
@@ -164,13 +150,13 @@
           0.6076
         ],
         "bbox_norm": [
-          0.4904,
-          0.5832,
-          0.0387,
-          0.0487
+          0.489,
+          0.5822,
+          0.0415,
+          0.0508
         ],
-        "radius_norm": 0.0244,
-        "stroke_area_px": 224
+        "radius_norm": 0.0254,
+        "stroke_area_px": 680
       },
       {
         "bbox_center_norm": [
@@ -178,13 +164,13 @@
           0.6159
         ],
         "bbox_norm": [
-          0.6038,
-          0.5946,
-          0.0401,
-          0.0425
+          0.6024,
+          0.5936,
+          0.0429,
+          0.0446
         ],
-        "radius_norm": 0.0213,
-        "stroke_area_px": 237
+        "radius_norm": 0.0223,
+        "stroke_area_px": 603
       }
     ]
   },
@@ -204,17 +190,17 @@
     "marks": [
       {
         "bbox_center_norm": [
-          0.4121,
-          0.0969
+          0.4224,
+          0.1026
         ],
         "bbox_norm": [
-          0.3573,
-          0.0766,
-          0.1094,
-          0.0405
+          0.3989,
+          0.086,
+          0.0471,
+          0.0332
         ],
-        "radius_norm": 0.041,
-        "stroke_area_px": 678
+        "radius_norm": 0.0177,
+        "stroke_area_px": 631
       },
       {
         "bbox_center_norm": [
@@ -222,13 +208,13 @@
           0.2776
         ],
         "bbox_norm": [
-          0.1884,
-          0.2677,
-          0.0582,
-          0.0197
+          0.187,
+          0.2667,
+          0.0609,
+          0.0218
         ],
-        "radius_norm": 0.0218,
-        "stroke_area_px": 171
+        "radius_norm": 0.0229,
+        "stroke_area_px": 453
       },
       {
         "bbox_center_norm": [
@@ -236,13 +222,13 @@
           0.329
         ],
         "bbox_norm": [
-          0.2064,
-          0.3217,
-          0.036,
-          0.0145
+          0.205,
+          0.3206,
+          0.0388,
+          0.0166
         ],
-        "radius_norm": 0.0135,
-        "stroke_area_px": 117
+        "radius_norm": 0.0145,
+        "stroke_area_px": 306
       },
       {
         "bbox_center_norm": [
@@ -250,13 +236,13 @@
           0.4162
         ],
         "bbox_norm": [
-          0.2285,
-          0.3871,
-          0.0762,
-          0.0581
+          0.2272,
+          0.3861,
+          0.0789,
+          0.0602
         ],
-        "radius_norm": 0.0291,
-        "stroke_area_px": 344
+        "radius_norm": 0.0301,
+        "stroke_area_px": 803
       },
       {
         "bbox_center_norm": [
@@ -264,13 +250,13 @@
           0.7547
         ],
         "bbox_norm": [
-          0.2673,
-          0.7391,
-          0.0319,
-          0.0312
+          0.2659,
+          0.7381,
+          0.0346,
+          0.0332
         ],
-        "radius_norm": 0.0156,
-        "stroke_area_px": 181
+        "radius_norm": 0.0166,
+        "stroke_area_px": 413
       }
     ]
   }

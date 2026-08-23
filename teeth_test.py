@@ -12,6 +12,7 @@ teeth_test.py（優化版）
 import cv2
 import numpy as np
 import os
+from pathlib import Path
 
 import sys; sys.path.insert(0, "/home/Zhen/projects/SegmentAnyTooth")
 from user_env import get_paths, setup_user_dirs
@@ -209,7 +210,8 @@ def detect_plaque(image_path):
     print("✅ ML + HSV 偵測完成")
     print(f"📂 {output_dir}")
 '''
-def detect_plaque(image_path):
+def detect_plaque_teaching(image_path):
+    """假牙教學模型專用。門檻針對塑膠模型調校，內容未更動。"""
     output_dir = str(_PATHS['teeth_color_test'])
     os.makedirs(output_dir, exist_ok=True)
 
@@ -282,8 +284,68 @@ def detect_plaque(image_path):
 
 
 # =========================
+# 真實牙齒版（染色劑）
+# =========================
+# 上面那組門檻是針對塑膠假牙模型調的，排除項鎖定模型牙齦與底座的特定顏色。
+# 真實口腔沒有那種顏色，而牙齦、嘴唇、皮膚都跟染劑同一個色系，直接套用會把
+# 28~55% 的整張影像判成菌斑。真實牙齒改走 dye_core：SAT 取牙齒 ROI +
+# 排除上下排咬合陰影帶 + Lab a* 局部對比。詳見 dye_core.py 的說明。
+
+_SAT_VIEW = {'front': 'front', 'left_side': 'left', 'right_side': 'right',
+             'upper_occlusal': 'upper', 'lower_occlusal': 'lower'}
+
+
+def detect_plaque_real(image_path):
+    import dye_core
+    output_dir = str(_PATHS['teeth_color_test'])
+    os.makedirs(output_dir, exist_ok=True)
+    name = os.path.basename(image_path)
+    view = os.path.splitext(name)[0]
+
+    img = cv2.imread(image_path)
+    if img is None:
+        print(f"  ❌ 讀不到 {name}")
+        return
+    OH, OW = img.shape[:2]
+
+    # SAT 跑在前處理後的 512×512 影像上（preprocess_photos.py 已先執行）
+    proc_path = _PATHS['real_teeth_proc'] / name
+    fdi_full = np.zeros((OH, OW), np.uint8)
+    if proc_path.exists():
+        try:
+            fdi512 = dye_core.sat_fdi_mask(cv2.imread(str(proc_path)),
+                                           _SAT_VIEW.get(view, 'front'), _WEIGHT_DIR)
+            fdi_full = dye_core.unpad_to_original(fdi512, OW, OH)
+        except Exception as e:
+            print(f"  ⚠️  {name}: SAT 失敗 ({e})")
+    else:
+        print(f"  ⚠️  {name}: 找不到前處理影像")
+
+    mask, info = dye_core.detect(img, fdi_full)
+    det = img.copy()
+    cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    cv2.drawContours(det, cnts, -1, (0, 0, 255), max(2, round(max(OH, OW) / 500)))
+    cv2.imwrite(os.path.join(output_dir, "mask_" + name), mask)
+    cv2.imwrite(os.path.join(output_dir, "det_" + name), det)
+
+    if "error" in info:
+        print(f"  ⚠️  {name}: {info['error']}，輸出空 mask")
+    else:
+        print(f"  ✅ {name}: 牙齒 {info['tooth_px']:,} px，菌斑 {info['plaque_px']:,} px "
+              f"({info['plaque_ratio_of_tooth'] * 100:.1f}% of tooth)，"
+              f"{info['region_count']} 區塊")
+
+
+# =========================
 # 執行（五張照片）
 # =========================
+_MODEL_TYPE = os.environ.get("DENTAL_MODEL_TYPE", "regular")
+_WEIGHT_DIR = Path("/home/Zhen/projects/SegmentAnyTooth") / "weight"
+
+# teaching = 塑膠假牙模型（原有門檻，未更動）｜regular = 真實牙齒（dye_core）
+detect_plaque = detect_plaque_teaching if _MODEL_TYPE == "teaching" else detect_plaque_real
+print(f"🎨 染色劑模式：{'假牙教學模型' if _MODEL_TYPE == 'teaching' else '真實牙齒'}")
+
 BASE_PATH = str(_PATHS["real_teeth"])
 PHOTOS = [
     'front.jpg', 'left_side.jpg', 'right_side.jpg',
