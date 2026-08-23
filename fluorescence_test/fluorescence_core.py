@@ -40,6 +40,11 @@ DEFAULT_CONFIG = {
 
     # ---- 端元估計 ----
     "excite_sample_pct": 20,      # 取 G 最低的前 N% 像素估計激發光 V
+    # 405nm 紫光的物理約束：藍必為最大分量、綠必須很小。自動估計違反時
+    # 代表取樣到的不是紫色背景（有環境光時會取到紅棕色牙齦），退回預設值。
+    "excite_fallback_bgr": [1.0, 0.033, 0.367],   # 暗場照片估出的乾淨值
+    "excite_min_b": 0.95,
+    "excite_max_g": 0.15,
     "enamel_sample_pct": 10,      # 取牙齒內 a* 最低（最綠）的前 N% 估計 E
     "plaque_endmember": [0.0, 0.0, 1.0],   # P：紅色螢光 (B,G,R)
 
@@ -54,7 +59,7 @@ DEFAULT_CONFIG = {
 
     # ---- 菌斑判定 ----
     "local_win_ratio": 0.061,     # 局部背景視窗 = long_side × ratio（≈一顆牙寬）
-    "z_thresh": 2.0,              # 局部殘差 / MAD 的門檻（2.5 保守 / 2.0 平衡 / 1.6 靈敏）
+    "z_thresh": 2.5,              # 局部殘差 / MAD 的門檻（3.0 保守 / 2.5 平衡 / 2.0 靈敏）
     "fp_rel_min": 1.5,            # fp 至少要是該影像牙齒 fp 中位數的幾倍
     "violet_guard_max": 1.25,     # 原圖 B/G 超過此值視為紫光污染 → 排除
     "specular_v_min": 245,        # 高光排除：V ≥ 此值且 S ≤ specular_s_max
@@ -86,18 +91,28 @@ def scale_to_working(img, long_side):
 # ==================================================================
 # 端元估計與解混
 # ==================================================================
-def estimate_excitation(img_bgr, sample_pct):
+def estimate_excitation(img_bgr, cfg):
     """
     405nm 激發光是反射光，本身幾乎不含綠色分量，
     所以取 G 最低的一群像素（背景黏膜、口腔深處）的平均色即為其方向。
+
+    但這個假設在有診療室環境光時會失效——最暗的一群變成紅棕色牙齦而非
+    紫色背景，估出來的 V 會變成紅色最大，物理上不可能。因此加上約束：
+    藍必為最大分量、綠必須很小，違反就退回暗場校準值。
+
+    回傳 (V, fallback_used)。
     """
     b, g, r = cv2.split(img_bgr.astype(np.float32))
-    thr = np.percentile(g, sample_pct)
+    thr = np.percentile(g, cfg["excite_sample_pct"])
     sel = (g <= thr) & (b + g + r > 30)           # 排除全黑
     if sel.sum() < 100:
         sel = g <= np.percentile(g, 50)
     v = np.array([b[sel].mean(), g[sel].mean(), r[sel].mean()], dtype=np.float32)
-    return v / (v.max() + 1e-6)
+    v /= (v.max() + 1e-6)
+
+    if v[0] < cfg["excite_min_b"] or v[1] > cfg["excite_max_g"]:
+        return np.array(cfg["excite_fallback_bgr"], dtype=np.float32), True
+    return v, False
 
 
 def estimate_enamel(img_bgr, tooth_mask, sample_pct):
@@ -247,7 +262,7 @@ def detect(img_bgr, cfg=None):
                 "work_size": (w, h), "scale": scale,
                 "info": {"error": "牙齒區域太小，無法偵測", "tooth_px": int((tooth > 0).sum())}}
 
-    V = estimate_excitation(work, cfg["excite_sample_pct"])
+    V, v_fallback = estimate_excitation(work, cfg)
     E = estimate_enamel(work, tooth, cfg["enamel_sample_pct"])
     P = np.array(cfg["plaque_endmember"], dtype=np.float32)
 
@@ -264,6 +279,7 @@ def detect(img_bgr, cfg=None):
         "work_size": (w, h), "scale": scale,
         "info": {
             "excitation_endmember_bgr": [round(float(x), 4) for x in V],
+            "excitation_fallback_used": bool(v_fallback),
             "enamel_endmember_bgr": [round(float(x), 4) for x in E],
             "tooth_threshold_g": round(g_thr, 1),
             "tooth_px": tooth_px,
