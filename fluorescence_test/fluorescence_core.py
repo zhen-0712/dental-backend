@@ -60,7 +60,12 @@ DEFAULT_CONFIG = {
     # ---- 菌斑判定 ----
     "local_win_ratio": 0.061,     # 局部背景視窗 = long_side × ratio（≈一顆牙寬）
     "z_thresh": 2.5,              # 局部殘差 / MAD 的門檻（3.0 保守 / 2.5 平衡 / 2.0 靈敏）
-    "fp_rel_min": 1.5,            # fp 至少要是該影像牙齒 fp 中位數的幾倍
+    # fp 至少要是該影像牙齒 fp 中位數的幾倍。
+    # 原設 1.5，但那會在環境光下失效：環境光把整張圖的 fp 抬高，下限跟著水漲
+    # 船高，反而砍掉通過 z 門檻的真訊號（實測 test2 有 98.8% 被砍）。
+    # 這道閘門原本用途是「防止在均勻乾淨的牙齒上亂觸發」，該職責現已由
+    # image_gate_min 承擔（用 fp/fe 比值、曝光無關），因此放寬到 1.0。
+    "fp_rel_min": 1.0,
     "violet_guard_max": 1.25,     # 原圖 B/G 超過此值視為紫光污染 → 排除
     "specular_v_min": 245,        # 高光排除：V ≥ 此值且 S ≤ specular_s_max
     "specular_s_max": 60,
