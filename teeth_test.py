@@ -308,18 +308,17 @@ def detect_plaque_real(image_path):
         return
     OH, OW = img.shape[:2]
 
-    # SAT 跑在前處理後的 512×512 影像上（preprocess_photos.py 已先執行）
-    proc_path = _PATHS['real_teeth_proc'] / name
+    # SAT 直接吃原圖（只做等比縮放置中，不做高光壓制/白平衡/CLAHE）。
+    # 實測 preprocess_photos.py 的處理會讓 SAT 涵蓋率下降——例如 b2 批次
+    # front 12%→28%、right_side 10%→36%，small_teeth 這類低解析度照片
+    # 尤其明顯。SAT 只需要幾何形狀，過度的色彩正規化反而傷害偵測。
     fdi_full = np.zeros((OH, OW), np.uint8)
-    if proc_path.exists():
-        try:
-            fdi512 = dye_core.sat_fdi_mask(cv2.imread(str(proc_path)),
-                                           _SAT_VIEW.get(view, 'front'), _WEIGHT_DIR)
-            fdi_full = dye_core.unpad_to_original(fdi512, OW, OH)
-        except Exception as e:
-            print(f"  ⚠️  {name}: SAT 失敗 ({e})")
-    else:
-        print(f"  ⚠️  {name}: 找不到前處理影像")
+    try:
+        fdi512 = dye_core.sat_fdi_mask(dye_core.pad_to_square(img),
+                                       _SAT_VIEW.get(view, 'front'), _WEIGHT_DIR)
+        fdi_full = dye_core.unpad_to_original(fdi512, OW, OH)
+    except Exception as e:
+        print(f"  ⚠️  {name}: SAT 失敗 ({e})")
 
     mask, info = dye_core.detect(img, fdi_full)
     det = img.copy()

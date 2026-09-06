@@ -45,9 +45,19 @@ DEFAULT_CONFIG = {
     "pre_blur_sigma": 2.0,
     "local_win": 141,           # 局部背景視窗（工作解析度下的 px）
     "z_thresh": 1.0,            # 局部殘差 / MAD
-    "min_area": 200,            # 最小區塊面積
+    # 最小區塊面積。原設 200 會把顏色訊號正確、z 值通過門檻的小區塊也濾掉
+    # ——實測 b5 的兩個標註區塊 z=1.44/1.65（均通過 z_thresh=1.0），開/閉運算
+    # 後仍有 193px / 149px，卻因低於 200 被判定為雜訊濾除。拿掉此門檻，
+    # 純靠 z-score 與形態學開閉運算本身去除雜訊。
+    "min_area": 0,
     "morph_ksize": 7,
     "occlusal_band_px": 35,     # 上下排咬合接觸帶的排除寬度，設 0 停用
+
+    # SAT 的 YOLO 信心門檻。預設 0.20 會漏掉畫面中偏小的牙齒——實測某批
+    # 受測者牙齒較小、照片解析度較低時，front 視角在 0.20 只偵測到 13 顆，
+    # 降到 0.05 可得 23 顆，標註被 ROI 涵蓋的比例從 12% 提升到 28%。
+    # 僅影響染色劑模式；extract_plaque_regions.py 的下游 ROI 過濾不受影響。
+    "sat_conf": 0.20,
 }
 
 UPPER_FDI = [11, 12, 13, 14, 15, 16, 17, 21, 22, 23, 24, 25, 26, 27, 18, 28]
@@ -55,6 +65,21 @@ LOWER_FDI = [31, 32, 33, 34, 35, 36, 37, 41, 42, 43, 44, 45, 46, 47, 38, 48]
 
 _SAM = None
 _YOLO = None
+
+
+def pad_to_square(img, target=512):
+    """置中縮放成正方形，灰底填充。與 preprocess_photos.py 相同的幾何，
+    但不做高光壓制／白平衡／CLAHE——那些會讓 SAT 在小尺寸、低解析度的
+    照片上表現變差（實測 b2 front 涵蓋率 12%→28%、right_side 10%→36%）。
+    菌斑偵測需要保留原始色彩訊號，SAT 只需要幾何形狀，兩者用同一張圖
+    反而互相拖累。"""
+    h, w = img.shape[:2]
+    s = target / max(h, w)
+    nh, nw = int(h * s), int(w * s)
+    r = cv2.resize(img, (nw, nh), interpolation=cv2.INTER_LANCZOS4)
+    ph, pw = target - nh, target - nw
+    return cv2.copyMakeBorder(r, ph // 2, ph - ph // 2, pw // 2, pw - pw // 2,
+                              cv2.BORDER_CONSTANT, value=[128, 128, 128])
 
 
 def load_models(weight_dir):
@@ -73,7 +98,7 @@ def load_models(weight_dir):
     return _SAM, _YOLO
 
 
-def sat_fdi_mask(proc_img, sat_view, weight_dir, conf=0.20):
+def sat_fdi_mask(proc_img, sat_view, weight_dir, conf=None):
     """
     對前處理後的 512×512 影像跑 SAT，回傳同尺寸的 FDI 遮罩（0=非牙齒）。
     左側視角沿用 extract_plaque_regions 的做法：水平翻轉後借用 right 模型。
@@ -82,6 +107,8 @@ def sat_fdi_mask(proc_img, sat_view, weight_dir, conf=0.20):
     from sam import sam_predict
     from utils import suppress_stdout
     sam, yolo = load_models(weight_dir)
+    if conf is None:
+        conf = DEFAULT_CONFIG["sat_conf"]
 
     flip = sat_view == "left"
     img = cv2.flip(proc_img, 1) if flip else proc_img
