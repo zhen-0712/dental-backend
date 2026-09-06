@@ -1,4 +1,644 @@
 {
+  "front2_test": {
+    "source": "2_front_test0.png",
+    "orig_size": [
+      1108,
+      1477
+    ],
+    "crop_rect_in_orig": [
+      64.0,
+      205.5,
+      1011.7,
+      793.9
+    ],
+    "match_score": 0.994,
+    "marks": [
+      {
+        "bbox_center_norm": [
+          0.382,
+          0.338
+        ],
+        "bbox_norm": [
+          0.295,
+          0.2923,
+          0.1741,
+          0.0915
+        ],
+        "radius_norm": 0.0653,
+        "stroke_area_px": 2363
+      },
+      {
+        "bbox_center_norm": [
+          0.2895,
+          0.3576
+        ],
+        "bbox_norm": [
+          0.2593,
+          0.3283,
+          0.0603,
+          0.0586
+        ],
+        "radius_norm": 0.0293,
+        "stroke_area_px": 558
+      },
+      {
+        "bbox_center_norm": [
+          0.6391,
+          0.4202
+        ],
+        "bbox_norm": [
+          0.6089,
+          0.3971,
+          0.0603,
+          0.0462
+        ],
+        "radius_norm": 0.0231,
+        "stroke_area_px": 578
+      },
+      {
+        "bbox_center_norm": [
+          0.4917,
+          0.4254
+        ],
+        "bbox_norm": [
+          0.3813,
+          0.393,
+          0.2207,
+          0.0647
+        ],
+        "radius_norm": 0.0828,
+        "stroke_area_px": 1837
+      },
+      {
+        "bbox_center_norm": [
+          0.733,
+          0.4305
+        ],
+        "bbox_norm": [
+          0.6775,
+          0.4012,
+          0.1111,
+          0.0586
+        ],
+        "radius_norm": 0.0417,
+        "stroke_area_px": 1031
+      }
+    ]
+  },
+  "left_side2_test": {
+    "source": "2_left_test0.png",
+    "orig_size": [
+      1108,
+      1477
+    ],
+    "crop_rect_in_orig": [
+      0.0,
+      225.2,
+      1100.4,
+      845.6
+    ],
+    "match_score": 0.998,
+    "marks": [
+      {
+        "bbox_center_norm": [
+          0.0301,
+          0.2733
+        ],
+        "bbox_norm": [
+          0.0,
+          0.2447,
+          0.0601,
+          0.0574
+        ],
+        "radius_norm": 0.0287,
+        "stroke_area_px": 516
+      },
+      {
+        "bbox_center_norm": [
+          0.2616,
+          0.3102
+        ],
+        "bbox_norm": [
+          0.2404,
+          0.2785,
+          0.0423,
+          0.0635
+        ],
+        "radius_norm": 0.0317,
+        "stroke_area_px": 485
+      },
+      {
+        "bbox_center_norm": [
+          0.362,
+          0.3118
+        ],
+        "bbox_norm": [
+          0.3374,
+          0.2928,
+          0.0492,
+          0.0379
+        ],
+        "radius_norm": 0.0189,
+        "stroke_area_px": 410
+      },
+      {
+        "bbox_center_norm": [
+          0.4767,
+          0.3281
+        ],
+        "bbox_norm": [
+          0.4549,
+          0.302,
+          0.0437,
+          0.0522
+        ],
+        "radius_norm": 0.0261,
+        "stroke_area_px": 472
+      },
+      {
+        "bbox_center_norm": [
+          0.5608,
+          0.3522
+        ],
+        "bbox_norm": [
+          0.5191,
+          0.3297,
+          0.0833,
+          0.0451
+        ],
+        "radius_norm": 0.0313,
+        "stroke_area_px": 649
+      },
+      {
+        "bbox_center_norm": [
+          0.6448,
+          0.3619
+        ],
+        "bbox_norm": [
+          0.6147,
+          0.3461,
+          0.0601,
+          0.0317
+        ],
+        "radius_norm": 0.0225,
+        "stroke_area_px": 471
+      },
+      {
+        "bbox_center_norm": [
+          0.1516,
+          0.4434
+        ],
+        "bbox_norm": [
+          0.1147,
+          0.4137,
+          0.0738,
+          0.0594
+        ],
+        "radius_norm": 0.0297,
+        "stroke_area_px": 530
+      },
+      {
+        "bbox_center_norm": [
+          0.2268,
+          0.47
+        ],
+        "bbox_norm": [
+          0.1994,
+          0.4587,
+          0.0546,
+          0.0225
+        ],
+        "radius_norm": 0.0205,
+        "stroke_area_px": 439
+      },
+      {
+        "bbox_center_norm": [
+          0.3231,
+          0.4833
+        ],
+        "bbox_norm": [
+          0.2691,
+          0.4577,
+          0.1079,
+          0.0512
+        ],
+        "radius_norm": 0.0405,
+        "stroke_area_px": 1194
+      },
+      {
+        "bbox_center_norm": [
+          0.4358,
+          0.4997
+        ],
+        "bbox_norm": [
+          0.4125,
+          0.4823,
+          0.0464,
+          0.0348
+        ],
+        "radius_norm": 0.0174,
+        "stroke_area_px": 395
+      }
+    ]
+  },
+  "lower_occlusal2_test": {
+    "source": "2_low_test0.png",
+    "orig_size": [
+      1108,
+      1477
+    ],
+    "crop_rect_in_orig": [
+      50.5,
+      98.5,
+      1056.1,
+      1317.0
+    ],
+    "match_score": 0.966,
+    "marks": [
+      {
+        "bbox_center_norm": [
+          0.2743,
+          0.7444
+        ],
+        "bbox_norm": [
+          0.2668,
+          0.7362,
+          0.015,
+          0.0164
+        ],
+        "radius_norm": 0.0082,
+        "stroke_area_px": 54
+      },
+      {
+        "bbox_center_norm": [
+          0.3296,
+          0.773
+        ],
+        "bbox_norm": [
+          0.3091,
+          0.7679,
+          0.041,
+          0.0102
+        ],
+        "radius_norm": 0.0154,
+        "stroke_area_px": 114
+      },
+      {
+        "bbox_center_norm": [
+          0.559,
+          0.8027
+        ],
+        "bbox_norm": [
+          0.533,
+          0.7976,
+          0.0519,
+          0.0102
+        ],
+        "radius_norm": 0.0195,
+        "stroke_area_px": 160
+      },
+      {
+        "bbox_center_norm": [
+          0.477,
+          0.8048
+        ],
+        "bbox_norm": [
+          0.4497,
+          0.7997,
+          0.0546,
+          0.0102
+        ],
+        "radius_norm": 0.0205,
+        "stroke_area_px": 164
+      }
+    ]
+  },
+  "right_side2_test": {
+    "source": "2_right_test0.png",
+    "orig_size": [
+      1108,
+      1477
+    ],
+    "crop_rect_in_orig": [
+      104.6,
+      137.9,
+      1003.1,
+      1003.1
+    ],
+    "match_score": 0.998,
+    "marks": [
+      {
+        "bbox_center_norm": [
+          0.6854,
+          0.3178
+        ],
+        "bbox_norm": [
+          0.467,
+          0.2701,
+          0.4369,
+          0.0956
+        ],
+        "radius_norm": 0.1639,
+        "stroke_area_px": 5521
+      },
+      {
+        "bbox_center_norm": [
+          0.4416,
+          0.3297
+        ],
+        "bbox_norm": [
+          0.4204,
+          0.3112,
+          0.0425,
+          0.037
+        ],
+        "radius_norm": 0.0185,
+        "stroke_area_px": 294
+      },
+      {
+        "bbox_center_norm": [
+          0.7012,
+          0.5069
+        ],
+        "bbox_norm": [
+          0.6669,
+          0.4971,
+          0.0685,
+          0.0195
+        ],
+        "radius_norm": 0.0257,
+        "stroke_area_px": 246
+      },
+      {
+        "bbox_center_norm": [
+          0.7916,
+          0.5151
+        ],
+        "bbox_norm": [
+          0.7478,
+          0.4899,
+          0.0877,
+          0.0503
+        ],
+        "radius_norm": 0.0329,
+        "stroke_area_px": 531
+      },
+      {
+        "bbox_center_norm": [
+          0.858,
+          0.5161
+        ],
+        "bbox_norm": [
+          0.8505,
+          0.5023,
+          0.0151,
+          0.0277
+        ],
+        "radius_norm": 0.0139,
+        "stroke_area_px": 184
+      },
+      {
+        "bbox_center_norm": [
+          0.6978,
+          0.5285
+        ],
+        "bbox_norm": [
+          0.6669,
+          0.5115,
+          0.0616,
+          0.0339
+        ],
+        "radius_norm": 0.0231,
+        "stroke_area_px": 190
+      },
+      {
+        "bbox_center_norm": [
+          0.7484,
+          0.5352
+        ],
+        "bbox_norm": [
+          0.7382,
+          0.5259,
+          0.0205,
+          0.0185
+        ],
+        "radius_norm": 0.0092,
+        "stroke_area_px": 72
+      }
+    ]
+  },
+  "upper_occlusal2_test": {
+    "source": "2_up_test0.png",
+    "orig_size": [
+      1108,
+      1477
+    ],
+    "crop_rect_in_orig": [
+      22.2,
+      39.4,
+      1085.6,
+      1334.2
+    ],
+    "match_score": 0.934,
+    "marks": [
+      {
+        "bbox_center_norm": [
+          0.2132,
+          0.2702
+        ],
+        "bbox_norm": [
+          0.2009,
+          0.2651,
+          0.0247,
+          0.0103
+        ],
+        "radius_norm": 0.0093,
+        "stroke_area_px": 60
+      },
+      {
+        "bbox_center_norm": [
+          0.1748,
+          0.3555
+        ],
+        "bbox_norm": [
+          0.1666,
+          0.3494,
+          0.0164,
+          0.0123
+        ],
+        "radius_norm": 0.0062,
+        "stroke_area_px": 89
+      },
+      {
+        "bbox_center_norm": [
+          0.8518,
+          0.4264
+        ],
+        "bbox_norm": [
+          0.8299,
+          0.4141,
+          0.0439,
+          0.0247
+        ],
+        "radius_norm": 0.0164,
+        "stroke_area_px": 207
+      },
+      {
+        "bbox_center_norm": [
+          0.8504,
+          0.5066
+        ],
+        "bbox_norm": [
+          0.8367,
+          0.5004,
+          0.0274,
+          0.0123
+        ],
+        "radius_norm": 0.0103,
+        "stroke_area_px": 134
+      },
+      {
+        "bbox_center_norm": [
+          0.316,
+          0.6731
+        ],
+        "bbox_norm": [
+          0.3023,
+          0.6536,
+          0.0274,
+          0.0391
+        ],
+        "radius_norm": 0.0195,
+        "stroke_area_px": 216
+      },
+      {
+        "bbox_center_norm": [
+          0.5702,
+          0.6746
+        ],
+        "bbox_norm": [
+          0.5681,
+          0.6649,
+          0.0041,
+          0.0195
+        ],
+        "radius_norm": 0.0098,
+        "stroke_area_px": 54
+      },
+      {
+        "bbox_center_norm": [
+          0.2475,
+          0.6777
+        ],
+        "bbox_norm": [
+          0.2434,
+          0.6628,
+          0.0082,
+          0.0298
+        ],
+        "radius_norm": 0.0149,
+        "stroke_area_px": 88
+      },
+      {
+        "bbox_center_norm": [
+          0.3824,
+          0.6988
+        ],
+        "bbox_norm": [
+          0.3407,
+          0.6607,
+          0.0836,
+          0.076
+        ],
+        "radius_norm": 0.038,
+        "stroke_area_px": 355
+      },
+      {
+        "bbox_center_norm": [
+          0.5558,
+          0.6998
+        ],
+        "bbox_norm": [
+          0.5531,
+          0.6885,
+          0.0055,
+          0.0226
+        ],
+        "radius_norm": 0.0113,
+        "stroke_area_px": 66
+      },
+      {
+        "bbox_center_norm": [
+          0.6695,
+          0.7029
+        ],
+        "bbox_norm": [
+          0.6586,
+          0.6772,
+          0.0219,
+          0.0514
+        ],
+        "radius_norm": 0.0257,
+        "stroke_area_px": 199
+      },
+      {
+        "bbox_center_norm": [
+          0.2406,
+          0.708
+        ],
+        "bbox_norm": [
+          0.2351,
+          0.7029,
+          0.011,
+          0.0103
+        ],
+        "radius_norm": 0.0051,
+        "stroke_area_px": 41
+      },
+      {
+        "bbox_center_norm": [
+          0.5722,
+          0.709
+        ],
+        "bbox_norm": [
+          0.5695,
+          0.7029,
+          0.0055,
+          0.0123
+        ],
+        "radius_norm": 0.0062,
+        "stroke_area_px": 41
+      },
+      {
+        "bbox_center_norm": [
+          0.4736,
+          0.7132
+        ],
+        "bbox_norm": [
+          0.4585,
+          0.6926,
+          0.0301,
+          0.0411
+        ],
+        "radius_norm": 0.0206,
+        "stroke_area_px": 172
+      },
+      {
+        "bbox_center_norm": [
+          0.7243,
+          0.7399
+        ],
+        "bbox_norm": [
+          0.6846,
+          0.7183,
+          0.0795,
+          0.0432
+        ],
+        "radius_norm": 0.0298,
+        "stroke_area_px": 255
+      }
+    ]
+  },
   "front4_test0": {
     "source": "4_front_test0.png",
     "orig_size": [
@@ -15,45 +655,17 @@
     "marks": [
       {
         "bbox_center_norm": [
-          0.5648,
-          0.3467
-        ],
-        "bbox_norm": [
-          0.3924,
-          0.3353,
-          0.3449,
-          0.0228
-        ],
-        "radius_norm": 0.1293,
-        "stroke_area_px": 1429
-      },
-      {
-        "bbox_center_norm": [
-          0.2731,
-          0.3917
+          0.2551,
+          0.4083
         ],
         "bbox_norm": [
           0.2103,
-          0.3384,
-          0.1255,
-          0.1066
+          0.3715,
+          0.0897,
+          0.0735
         ],
-        "radius_norm": 0.0533,
-        "stroke_area_px": 1441
-      },
-      {
-        "bbox_center_norm": [
-          0.718,
-          0.416
-        ],
-        "bbox_norm": [
-          0.7014,
-          0.386,
-          0.0331,
-          0.06
-        ],
-        "radius_norm": 0.03,
-        "stroke_area_px": 621
+        "radius_norm": 0.0367,
+        "stroke_area_px": 835
       },
       {
         "bbox_center_norm": [
@@ -67,119 +679,119 @@
           0.0466
         ],
         "radius_norm": 0.0233,
-        "stroke_area_px": 667
+        "stroke_area_px": 568
       },
       {
         "bbox_center_norm": [
-          0.5517,
-          0.5035
+          0.718,
+          0.4181
         ],
         "bbox_norm": [
-          0.5455,
-          0.4978,
-          0.0124,
-          0.0114
+          0.7014,
+          0.3902,
+          0.0331,
+          0.0559
         ],
-        "radius_norm": 0.0057,
-        "stroke_area_px": 41
+        "radius_norm": 0.0279,
+        "stroke_area_px": 467
       },
       {
         "bbox_center_norm": [
-          0.46,
-          0.535
+          0.2068,
+          0.5278
         ],
         "bbox_norm": [
-          0.4559,
-          0.5236,
-          0.0083,
-          0.0228
+          0.1951,
+          0.5226,
+          0.0235,
+          0.0103
         ],
-        "radius_norm": 0.0114,
-        "stroke_area_px": 58
+        "radius_norm": 0.0088,
+        "stroke_area_px": 62
       },
       {
         "bbox_center_norm": [
-          0.1889,
-          0.5464
+          0.1737,
+          0.5469
         ],
         "bbox_norm": [
           0.1579,
-          0.5226,
-          0.0621,
-          0.0476
+          0.5298,
+          0.0317,
+          0.0341
         ],
-        "radius_norm": 0.0238,
-        "stroke_area_px": 514
+        "radius_norm": 0.0171,
+        "stroke_area_px": 134
       },
       {
         "bbox_center_norm": [
-          0.3717,
-          0.5464
+          0.1979,
+          0.5542
         ],
         "bbox_norm": [
-          0.3676,
-          0.5371,
-          0.0083,
-          0.0186
+          0.1868,
+          0.5423,
+          0.0221,
+          0.0238
         ],
-        "radius_norm": 0.0093,
-        "stroke_area_px": 68
+        "radius_norm": 0.0119,
+        "stroke_area_px": 57
       },
       {
         "bbox_center_norm": [
-          0.7035,
-          0.5609
+          0.7063,
+          0.5578
+        ],
+        "bbox_norm": [
+          0.6849,
+          0.5423,
+          0.0428,
+          0.031
+        ],
+        "radius_norm": 0.016,
+        "stroke_area_px": 162
+      },
+      {
+        "bbox_center_norm": [
+          0.2441,
+          0.563
+        ],
+        "bbox_norm": [
+          0.2172,
+          0.5443,
+          0.0538,
+          0.0372
+        ],
+        "radius_norm": 0.0202,
+        "stroke_area_px": 280
+      },
+      {
+        "bbox_center_norm": [
+          0.6883,
+          0.563
         ],
         "bbox_norm": [
           0.6794,
-          0.5412,
-          0.0483,
-          0.0393
+          0.5516,
+          0.0179,
+          0.0228
         ],
-        "radius_norm": 0.0197,
-        "stroke_area_px": 442
+        "radius_norm": 0.0114,
+        "stroke_area_px": 75
       },
       {
         "bbox_center_norm": [
-          0.2489,
-          0.5718
+          0.6587,
+          0.5904
         ],
         "bbox_norm": [
-          0.2034,
-          0.5433,
-          0.0911,
-          0.0569
+          0.6297,
+          0.5806,
+          0.0579,
+          0.0197
         ],
-        "radius_norm": 0.0341,
-        "stroke_area_px": 987
-      },
-      {
-        "bbox_center_norm": [
-          0.6573,
-          0.5883
-        ],
-        "bbox_norm": [
-          0.6173,
-          0.5661,
-          0.08,
-          0.0445
-        ],
-        "radius_norm": 0.03,
-        "stroke_area_px": 845
-      },
-      {
-        "bbox_center_norm": [
-          0.6159,
-          0.6126
-        ],
-        "bbox_norm": [
-          0.5952,
-          0.6095,
-          0.0414,
-          0.0062
-        ],
-        "radius_norm": 0.0155,
-        "stroke_area_px": 126
+        "radius_norm": 0.0217,
+        "stroke_area_px": 171
       }
     ]
   },
@@ -199,115 +811,115 @@
     "marks": [
       {
         "bbox_center_norm": [
-          0.1786,
-          0.2775
-        ],
-        "bbox_norm": [
-          0.1662,
-          0.2744,
-          0.0249,
-          0.0062
-        ],
-        "radius_norm": 0.0093,
-        "stroke_area_px": 65
-      },
-      {
-        "bbox_center_norm": [
-          0.4196,
-          0.2847
-        ],
-        "bbox_norm": [
-          0.3029,
-          0.2537,
-          0.2334,
-          0.0621
-        ],
-        "radius_norm": 0.0875,
-        "stroke_area_px": 1172
-      },
-      {
-        "bbox_center_norm": [
-          0.3775,
-          0.3344
-        ],
-        "bbox_norm": [
-          0.3471,
-          0.3033,
-          0.0608,
-          0.0621
-        ],
-        "radius_norm": 0.0311,
-        "stroke_area_px": 700
-      },
-      {
-        "bbox_center_norm": [
           0.2594,
-          0.3354
+          0.3344
         ],
         "bbox_norm": [
           0.2325,
           0.2982,
           0.0539,
-          0.0745
+          0.0725
         ],
-        "radius_norm": 0.0373,
-        "stroke_area_px": 656
+        "radius_norm": 0.0362,
+        "stroke_area_px": 521
+      },
+      {
+        "bbox_center_norm": [
+          0.3761,
+          0.3349
+        ],
+        "bbox_norm": [
+          0.3471,
+          0.3044,
+          0.058,
+          0.0611
+        ],
+        "radius_norm": 0.0305,
+        "stroke_area_px": 499
       },
       {
         "bbox_center_norm": [
           0.1959,
-          0.4421
+          0.4426
         ],
         "bbox_norm": [
           0.1869,
-          0.4286,
+          0.4296,
           0.018,
-          0.0269
+          0.0259
         ],
-        "radius_norm": 0.0135,
-        "stroke_area_px": 237
+        "radius_norm": 0.0129,
+        "stroke_area_px": 223
       },
       {
         "bbox_center_norm": [
-          0.5349,
-          0.4695
+          0.307,
+          0.4623
         ],
         "bbox_norm": [
-          0.5004,
-          0.4452,
-          0.069,
-          0.0487
+          0.2946,
+          0.4462,
+          0.0249,
+          0.0321
         ],
-        "radius_norm": 0.0259,
-        "stroke_area_px": 705
+        "radius_norm": 0.016,
+        "stroke_area_px": 106
       },
       {
         "bbox_center_norm": [
-          0.3008,
+          0.2849,
           0.47
         ],
         "bbox_norm": [
           0.2739,
-          0.4441,
-          0.0539,
-          0.0518
+          0.4555,
+          0.0221,
+          0.029
         ],
-        "radius_norm": 0.0259,
-        "stroke_area_px": 800
+        "radius_norm": 0.0145,
+        "stroke_area_px": 102
       },
       {
         "bbox_center_norm": [
-          0.4313,
-          0.4762
+          0.5383,
+          0.47
         ],
         "bbox_norm": [
-          0.3954,
-          0.4535,
-          0.0718,
-          0.0456
+          0.5087,
+          0.4462,
+          0.0594,
+          0.0476
         ],
-        "radius_norm": 0.0269,
-        "stroke_area_px": 904
+        "radius_norm": 0.0238,
+        "stroke_area_px": 315
+      },
+      {
+        "bbox_center_norm": [
+          0.4362,
+          0.4783
+        ],
+        "bbox_norm": [
+          0.4051,
+          0.4586,
+          0.0621,
+          0.0393
+        ],
+        "radius_norm": 0.0233,
+        "stroke_area_px": 229
+      },
+      {
+        "bbox_center_norm": [
+          0.4265,
+          0.483
+        ],
+        "bbox_norm": [
+          0.4092,
+          0.4731,
+          0.0345,
+          0.0197
+        ],
+        "radius_norm": 0.0129,
+        "stroke_area_px": 62
       }
     ]
   },
@@ -327,283 +939,73 @@
     "marks": [
       {
         "bbox_center_norm": [
-          0.4938,
-          0.2198
-        ],
-        "bbox_norm": [
-          0.4593,
-          0.2141,
-          0.0691,
-          0.0114
-        ],
-        "radius_norm": 0.0259,
-        "stroke_area_px": 384
-      },
-      {
-        "bbox_center_norm": [
-          0.2256,
-          0.2768
-        ],
-        "bbox_norm": [
-          0.1578,
-          0.239,
-          0.1355,
-          0.0756
-        ],
-        "radius_norm": 0.0508,
-        "stroke_area_px": 892
-      },
-      {
-        "bbox_center_norm": [
-          0.8194,
-          0.3136
-        ],
-        "bbox_norm": [
-          0.8132,
-          0.3074,
-          0.0124,
-          0.0124
-        ],
-        "radius_norm": 0.0062,
-        "stroke_area_px": 79
-      },
-      {
-        "bbox_center_norm": [
-          0.2622,
-          0.4778
-        ],
-        "bbox_norm": [
-          0.2339,
-          0.4576,
-          0.0567,
-          0.0404
-        ],
-        "radius_norm": 0.0213,
-        "stroke_area_px": 386
-      },
-      {
-        "bbox_center_norm": [
-          0.285,
-          0.5472
-        ],
-        "bbox_norm": [
-          0.2795,
-          0.5415,
-          0.0111,
-          0.0114
-        ],
-        "radius_norm": 0.0057,
-        "stroke_area_px": 52
-      },
-      {
-        "bbox_center_norm": [
-          0.5899,
-          0.5804
-        ],
-        "bbox_norm": [
-          0.5809,
-          0.5716,
-          0.018,
-          0.0176
-        ],
-        "radius_norm": 0.0088,
-        "stroke_area_px": 112
-      },
-      {
-        "bbox_center_norm": [
-          0.2892,
-          0.6171
-        ],
-        "bbox_norm": [
-          0.256,
-          0.5622,
-          0.0664,
-          0.1098
-        ],
-        "radius_norm": 0.0549,
-        "stroke_area_px": 1281
-      },
-      {
-        "bbox_center_norm": [
-          0.7289,
-          0.6348
-        ],
-        "bbox_norm": [
-          0.7192,
-          0.6037,
-          0.0194,
-          0.0622
-        ],
-        "radius_norm": 0.0311,
-        "stroke_area_px": 401
-      },
-      {
-        "bbox_center_norm": [
-          0.563,
-          0.6415
-        ],
-        "bbox_norm": [
-          0.545,
-          0.6254,
-          0.0359,
-          0.0321
-        ],
-        "radius_norm": 0.0161,
-        "stroke_area_px": 423
-      },
-      {
-        "bbox_center_norm": [
-          0.1841,
+          0.1834,
           0.6482
         ],
         "bbox_norm": [
           0.1675,
           0.6358,
-          0.0332,
+          0.0318,
           0.0249
         ],
         "radius_norm": 0.0124,
-        "stroke_area_px": 274
+        "stroke_area_px": 226
       },
       {
         "bbox_center_norm": [
-          0.6611,
+          0.6604,
           0.6684
         ],
         "bbox_norm": [
           0.6418,
           0.6575,
-          0.0387,
-          0.0218
-        ],
-        "radius_norm": 0.0145,
-        "stroke_area_px": 341
-      },
-      {
-        "bbox_center_norm": [
-          0.1903,
-          0.6871
-        ],
-        "bbox_norm": [
-          0.1827,
-          0.6762,
-          0.0152,
-          0.0218
-        ],
-        "radius_norm": 0.0109,
-        "stroke_area_px": 113
-      },
-      {
-        "bbox_center_norm": [
-          0.6881,
-          0.715
-        ],
-        "bbox_norm": [
-          0.6763,
-          0.7042,
-          0.0235,
-          0.0218
-        ],
-        "radius_norm": 0.0109,
-        "stroke_area_px": 200
-      },
-      {
-        "bbox_center_norm": [
-          0.4323,
-          0.7415
-        ],
-        "bbox_norm": [
-          0.4164,
-          0.727,
-          0.0318,
-          0.029
-        ],
-        "radius_norm": 0.0145,
-        "stroke_area_px": 354
-      },
-      {
-        "bbox_center_norm": [
-          0.2498,
-          0.743
-        ],
-        "bbox_norm": [
-          0.2297,
-          0.728,
-          0.0401,
-          0.03
-        ],
-        "radius_norm": 0.015,
-        "stroke_area_px": 272
-      },
-      {
-        "bbox_center_norm": [
-          0.3314,
-          0.7539
-        ],
-        "bbox_norm": [
-          0.3141,
-          0.7321,
-          0.0346,
-          0.0435
-        ],
-        "radius_norm": 0.0218,
-        "stroke_area_px": 441
-      },
-      {
-        "bbox_center_norm": [
-          0.4973,
-          0.756
-        ],
-        "bbox_norm": [
-          0.4786,
-          0.7239,
           0.0373,
-          0.0642
+          0.0218
         ],
-        "radius_norm": 0.0321,
-        "stroke_area_px": 821
+        "radius_norm": 0.014,
+        "stroke_area_px": 251
       },
       {
         "bbox_center_norm": [
-          0.359,
-          0.7741
+          0.4282,
+          0.742
         ],
         "bbox_norm": [
-          0.35,
-          0.7694,
-          0.018,
-          0.0093
+          0.4178,
+          0.729,
+          0.0207,
+          0.0259
         ],
-        "radius_norm": 0.0067,
+        "radius_norm": 0.013,
+        "stroke_area_px": 101
+      },
+      {
+        "bbox_center_norm": [
+          0.3341,
+          0.7456
+        ],
+        "bbox_norm": [
+          0.3265,
+          0.7342,
+          0.0152,
+          0.0228
+        ],
+        "radius_norm": 0.0114,
         "stroke_area_px": 86
       },
       {
         "bbox_center_norm": [
-          0.4012,
-          0.7788
+          0.5007,
+          0.7472
         ],
         "bbox_norm": [
-          0.3763,
-          0.7715,
-          0.0498,
-          0.0145
+          0.4855,
+          0.7239,
+          0.0304,
+          0.0466
         ],
-        "radius_norm": 0.0187,
-        "stroke_area_px": 275
-      },
-      {
-        "bbox_center_norm": [
-          0.6031,
-          0.7798
-        ],
-        "bbox_norm": [
-          0.5643,
-          0.7643,
-          0.0774,
-          0.0311
-        ],
-        "radius_norm": 0.029,
-        "stroke_area_px": 548
+        "radius_norm": 0.0233,
+        "stroke_area_px": 193
       }
     ]
   },
@@ -627,83 +1029,69 @@
           0.3912
         ],
         "bbox_norm": [
-          0.7187,
+          0.7215,
           0.3542,
-          0.0822,
+          0.0766,
           0.0741
         ],
         "radius_norm": 0.037,
-        "stroke_area_px": 828
+        "stroke_area_px": 663
       },
       {
         "bbox_center_norm": [
-          0.6497,
-          0.3954
+          0.6504,
+          0.4006
         ],
         "bbox_norm": [
-          0.6142,
-          0.3625,
-          0.071,
-          0.0657
+          0.6156,
+          0.374,
+          0.0696,
+          0.0532
         ],
-        "radius_norm": 0.0329,
-        "stroke_area_px": 940
+        "radius_norm": 0.0266,
+        "stroke_area_px": 562
       },
       {
         "bbox_center_norm": [
-          0.5453,
-          0.4064
+          0.5446,
+          0.4079
         ],
         "bbox_norm": [
-          0.5209,
-          0.3834,
-          0.0487,
-          0.0459
+          0.5223,
+          0.3865,
+          0.0446,
+          0.0428
         ],
-        "radius_norm": 0.023,
-        "stroke_area_px": 557
-      },
-      {
-        "bbox_center_norm": [
-          0.6581,
-          0.506
-        ],
-        "bbox_norm": [
-          0.6212,
-          0.47,
-          0.0738,
-          0.072
-        ],
-        "radius_norm": 0.036,
-        "stroke_area_px": 1008
+        "radius_norm": 0.0214,
+        "stroke_area_px": 375
       },
       {
         "bbox_center_norm": [
           0.5508,
-          0.5175
+          0.505
         ],
         "bbox_norm": [
           0.4638,
-          0.4805,
+          0.4815,
           0.1741,
-          0.0741
+          0.047
         ],
         "radius_norm": 0.0653,
-        "stroke_area_px": 2101
+        "stroke_area_px": 858
       },
       {
         "bbox_center_norm": [
-          0.6052,
-          0.5598
+          0.6588,
+          0.5066
         ],
         "bbox_norm": [
-          0.5933,
-          0.5577,
-          0.0237,
-          0.0042
+          0.6226,
+          0.4711,
+          0.0724,
+          0.071
         ],
-        "radius_norm": 0.0089,
-        "stroke_area_px": 66
+        "radius_norm": 0.0355,
+        "stroke_area_px": 644
       }
     ]
   },
@@ -723,241 +1111,741 @@
     "marks": [
       {
         "bbox_center_norm": [
-          0.5043,
-          0.194
+          0.3111,
+          0.2625
         ],
         "bbox_norm": [
-          0.4655,
-          0.1878,
-          0.0776,
-          0.0125
-        ],
-        "radius_norm": 0.0291,
-        "stroke_area_px": 283
-      },
-      {
-        "bbox_center_norm": [
-          0.3859,
-          0.2039
-        ],
-        "bbox_norm": [
-          0.363,
-          0.1981,
-          0.0457,
-          0.0114
-        ],
-        "radius_norm": 0.0171,
-        "stroke_area_px": 164
-      },
-      {
-        "bbox_center_norm": [
-          0.6989,
-          0.2314
-        ],
-        "bbox_norm": [
-          0.6705,
-          0.2179,
-          0.0568,
-          0.027
-        ],
-        "radius_norm": 0.0213,
-        "stroke_area_px": 184
-      },
-      {
-        "bbox_center_norm": [
-          0.3056,
-          0.2672
-        ],
-        "bbox_norm": [
-          0.2592,
+          0.2703,
           0.2407,
-          0.0928,
-          0.0529
+          0.0817,
+          0.0436
         ],
-        "radius_norm": 0.0348,
-        "stroke_area_px": 1019
-      },
-      {
-        "bbox_center_norm": [
-          0.7515,
-          0.2698
-        ],
-        "bbox_norm": [
-          0.7384,
-          0.2563,
-          0.0263,
-          0.027
-        ],
-        "radius_norm": 0.0135,
-        "stroke_area_px": 153
-      },
-      {
-        "bbox_center_norm": [
-          0.5029,
-          0.3129
-        ],
-        "bbox_norm": [
-          0.3007,
-          0.2843,
-          0.4044,
-          0.0571
-        ],
-        "radius_norm": 0.1516,
-        "stroke_area_px": 5644
+        "radius_norm": 0.0306,
+        "stroke_area_px": 434
       },
       {
         "bbox_center_norm": [
           0.289,
-          0.4597
+          0.4603
         ],
         "bbox_norm": [
           0.2689,
-          0.4421,
+          0.4442,
           0.0402,
-          0.0353
-        ],
-        "radius_norm": 0.0176,
-        "stroke_area_px": 460
-      },
-      {
-        "bbox_center_norm": [
-          0.3901,
-          0.5838
-        ],
-        "bbox_norm": [
-          0.3769,
-          0.5677,
-          0.0263,
           0.0322
         ],
         "radius_norm": 0.0161,
-        "stroke_area_px": 240
+        "stroke_area_px": 349
+      }
+    ]
+  },
+  "front5_test0": {
+    "source": "5_front_test0.png",
+    "orig_size": [
+      2160,
+      2880
+    ],
+    "crop_rect_in_orig": [
+      2.4,
+      21.6,
+      2116.8,
+      2822.4
+    ],
+    "match_score": 0.988,
+    "marks": [
+      {
+        "bbox_center_norm": [
+          0.237,
+          0.4374
+        ],
+        "bbox_norm": [
+          0.2006,
+          0.4086,
+          0.0728,
+          0.0576
+        ],
+        "radius_norm": 0.0288,
+        "stroke_area_px": 280
       },
       {
         "bbox_center_norm": [
-          0.3617,
-          0.5874
+          0.2707,
+          0.4394
         ],
         "bbox_norm": [
-          0.3534,
-          0.5802,
-          0.0166,
-          0.0145
+          0.2653,
+          0.4268,
+          0.0108,
+          0.0253
         ],
-        "radius_norm": 0.0073,
-        "stroke_area_px": 108
+        "radius_norm": 0.0126,
+        "stroke_area_px": 61
       },
       {
         "bbox_center_norm": [
-          0.4136,
-          0.5973
+          0.1561,
+          0.446
         ],
         "bbox_norm": [
-          0.406,
-          0.5916,
-          0.0152,
-          0.0114
+          0.1197,
+          0.4005,
+          0.0728,
+          0.0909
         ],
-        "radius_norm": 0.0057,
-        "stroke_area_px": 65
+        "radius_norm": 0.0455,
+        "stroke_area_px": 646
       },
       {
         "bbox_center_norm": [
-          0.3312,
-          0.604
+          0.2235,
+          0.4586
         ],
         "bbox_norm": [
-          0.3215,
-          0.5999,
-          0.0194,
-          0.0083
+          0.2101,
+          0.4399,
+          0.027,
+          0.0374
         ],
-        "radius_norm": 0.0073,
-        "stroke_area_px": 48
+        "radius_norm": 0.0187,
+        "stroke_area_px": 333
       },
       {
         "bbox_center_norm": [
-          0.6705,
-          0.6409
+          0.7284,
+          0.4798
         ],
         "bbox_norm": [
-          0.6566,
-          0.6269,
-          0.0277,
-          0.028
+          0.7223,
+          0.4591,
+          0.0121,
+          0.0414
         ],
-        "radius_norm": 0.014,
-        "stroke_area_px": 174
+        "radius_norm": 0.0207,
+        "stroke_area_px": 311
       },
       {
         "bbox_center_norm": [
-          0.3229,
-          0.6705
+          0.3307,
+          0.4935
         ],
         "bbox_norm": [
-          0.3063,
-          0.6549,
-          0.0332,
-          0.0311
+          0.3017,
+          0.4813,
+          0.058,
+          0.0242
         ],
-        "radius_norm": 0.0156,
-        "stroke_area_px": 270
+        "radius_norm": 0.0217,
+        "stroke_area_px": 339
       },
       {
         "bbox_center_norm": [
-          0.3534,
-          0.8132
+          0.4722,
+          0.55
         ],
         "bbox_norm": [
-          0.3492,
-          0.8033,
-          0.0083,
-          0.0197
+          0.4608,
+          0.5329,
+          0.0229,
+          0.0344
         ],
-        "radius_norm": 0.0099,
-        "stroke_area_px": 85
+        "radius_norm": 0.0172,
+        "stroke_area_px": 147
       },
       {
         "bbox_center_norm": [
-          0.2308,
-          0.8168
+          0.1649,
+          0.551
         ],
         "bbox_norm": [
-          0.2176,
-          0.8096,
-          0.0263,
-          0.0145
+          0.1386,
+          0.5268,
+          0.0526,
+          0.0485
         ],
-        "radius_norm": 0.0099,
-        "stroke_area_px": 141
+        "radius_norm": 0.0242,
+        "stroke_area_px": 246
       },
       {
         "bbox_center_norm": [
-          0.5542,
-          0.8392
+          0.6893,
+          0.5601
         ],
         "bbox_norm": [
+          0.6805,
           0.55,
-          0.8334,
-          0.0083,
-          0.0114
+          0.0175,
+          0.0202
         ],
-        "radius_norm": 0.0057,
-        "stroke_area_px": 54
+        "radius_norm": 0.0101,
+        "stroke_area_px": 55
       },
       {
         "bbox_center_norm": [
-          0.694,
-          0.8485
+          0.2202,
+          0.5682
         ],
         "bbox_norm": [
-          0.6774,
-          0.8366,
-          0.0332,
-          0.0239
+          0.1979,
+          0.55,
+          0.0445,
+          0.0364
         ],
-        "radius_norm": 0.0125,
-        "stroke_area_px": 275
+        "radius_norm": 0.0182,
+        "stroke_area_px": 159
+      },
+      {
+        "bbox_center_norm": [
+          0.6434,
+          0.5753
+        ],
+        "bbox_norm": [
+          0.632,
+          0.5591,
+          0.0229,
+          0.0323
+        ],
+        "radius_norm": 0.0162,
+        "stroke_area_px": 109
+      }
+    ]
+  },
+  "left_side5_test0": {
+    "source": "5_left_test0.png",
+    "orig_size": [
+      2160,
+      2880
+    ],
+    "crop_rect_in_orig": [
+      0.0,
+      847.2,
+      2042.4,
+      1562.4
+    ],
+    "match_score": 0.994,
+    "marks": [
+      {
+        "bbox_center_norm": [
+          0.3125,
+          0.4691
+        ],
+        "bbox_norm": [
+          0.2935,
+          0.428,
+          0.0379,
+          0.0821
+        ],
+        "radius_norm": 0.0411,
+        "stroke_area_px": 290
+      },
+      {
+        "bbox_center_norm": [
+          0.3524,
+          0.4691
+        ],
+        "bbox_norm": [
+          0.3328,
+          0.4382,
+          0.0392,
+          0.0619
+        ],
+        "radius_norm": 0.0309,
+        "stroke_area_px": 253
+      },
+      {
+        "bbox_center_norm": [
+          0.4417,
+          0.4823
+        ],
+        "bbox_norm": [
+          0.4153,
+          0.4422,
+          0.0528,
+          0.0801
+        ],
+        "radius_norm": 0.0401,
+        "stroke_area_px": 391
+      },
+      {
+        "bbox_center_norm": [
+          0.2137,
+          0.4838
+        ],
+        "bbox_norm": [
+          0.1961,
+          0.4544,
+          0.0352,
+          0.0588
+        ],
+        "radius_norm": 0.0294,
+        "stroke_area_px": 306
+      },
+      {
+        "bbox_center_norm": [
+          0.56,
+          0.5117
+        ],
+        "bbox_norm": [
+          0.5357,
+          0.496,
+          0.0487,
+          0.0314
+        ],
+        "radius_norm": 0.0183,
+        "stroke_area_px": 300
+      },
+      {
+        "bbox_center_norm": [
+          0.5113,
+          0.5943
+        ],
+        "bbox_norm": [
+          0.4748,
+          0.5791,
+          0.073,
+          0.0304
+        ],
+        "radius_norm": 0.0274,
+        "stroke_area_px": 256
+      },
+      {
+        "bbox_center_norm": [
+          0.2462,
+          0.5984
+        ],
+        "bbox_norm": [
+          0.23,
+          0.572,
+          0.0325,
+          0.0527
+        ],
+        "radius_norm": 0.0264,
+        "stroke_area_px": 197
+      },
+      {
+        "bbox_center_norm": [
+          0.282,
+          0.6019
+        ],
+        "bbox_norm": [
+          0.2678,
+          0.5842,
+          0.0284,
+          0.0355
+        ],
+        "radius_norm": 0.0177,
+        "stroke_area_px": 118
+      },
+      {
+        "bbox_center_norm": [
+          0.4099,
+          0.606
+        ],
+        "bbox_norm": [
+          0.3734,
+          0.5781,
+          0.073,
+          0.0558
+        ],
+        "radius_norm": 0.0279,
+        "stroke_area_px": 282
+      },
+      {
+        "bbox_center_norm": [
+          0.5249,
+          0.6141
+        ],
+        "bbox_norm": [
+          0.5086,
+          0.6075,
+          0.0325,
+          0.0132
+        ],
+        "radius_norm": 0.0122,
+        "stroke_area_px": 57
+      }
+    ]
+  },
+  "lower_occlusal5_test0": {
+    "source": "5_low_test0.png",
+    "orig_size": [
+      2160,
+      2880
+    ],
+    "crop_rect_in_orig": [
+      16.8,
+      163.2,
+      2042.4,
+      2659.2
+    ],
+    "match_score": 0.991,
+    "marks": [
+      {
+        "bbox_center_norm": [
+          0.7041,
+          0.7006
+        ],
+        "bbox_norm": [
+          0.6683,
+          0.6894,
+          0.0716,
+          0.0223
+        ],
+        "radius_norm": 0.0268,
+        "stroke_area_px": 370
+      },
+      {
+        "bbox_center_norm": [
+          0.1773,
+          0.7092
+        ],
+        "bbox_norm": [
+          0.1645,
+          0.7006,
+          0.0257,
+          0.0172
+        ],
+        "radius_norm": 0.0096,
+        "stroke_area_px": 126
+      },
+      {
+        "bbox_center_norm": [
+          0.2766,
+          0.7573
+        ],
+        "bbox_norm": [
+          0.2671,
+          0.7522,
+          0.0189,
+          0.0101
+        ],
+        "radius_norm": 0.0071,
+        "stroke_area_px": 70
+      },
+      {
+        "bbox_center_norm": [
+          0.2536,
+          0.7694
+        ],
+        "bbox_norm": [
+          0.2415,
+          0.7623,
+          0.0243,
+          0.0142
+        ],
+        "radius_norm": 0.0091,
+        "stroke_area_px": 67
+      },
+      {
+        "bbox_center_norm": [
+          0.6514,
+          0.7785
+        ],
+        "bbox_norm": [
+          0.6278,
+          0.7654,
+          0.0473,
+          0.0263
+        ],
+        "radius_norm": 0.0177,
+        "stroke_area_px": 118
+      },
+      {
+        "bbox_center_norm": [
+          0.515,
+          0.7947
+        ],
+        "bbox_norm": [
+          0.4873,
+          0.7846,
+          0.0554,
+          0.0202
+        ],
+        "radius_norm": 0.0208,
+        "stroke_area_px": 190
+      }
+    ]
+  },
+  "right_side5_test0": {
+    "source": "5_right_test0.png",
+    "orig_size": [
+      2160,
+      2880
+    ],
+    "crop_rect_in_orig": [
+      156.0,
+      1027.2,
+      1972.8,
+      1464.0
+    ],
+    "match_score": 0.997,
+    "marks": [
+      {
+        "bbox_center_norm": [
+          0.6282,
+          0.5162
+        ],
+        "bbox_norm": [
+          0.6167,
+          0.5045,
+          0.023,
+          0.0233
+        ],
+        "radius_norm": 0.0116,
+        "stroke_area_px": 96
+      },
+      {
+        "bbox_center_norm": [
+          0.6991,
+          0.5182
+        ],
+        "bbox_norm": [
+          0.6721,
+          0.4903,
+          0.054,
+          0.0557
+        ],
+        "radius_norm": 0.0278,
+        "stroke_area_px": 472
+      },
+      {
+        "bbox_center_norm": [
+          0.6052,
+          0.5334
+        ],
+        "bbox_norm": [
+          0.5856,
+          0.5167,
+          0.0392,
+          0.0334
+        ],
+        "radius_norm": 0.0167,
+        "stroke_area_px": 120
+      },
+      {
+        "bbox_center_norm": [
+          0.7701,
+          0.545
+        ],
+        "bbox_norm": [
+          0.7572,
+          0.5369,
+          0.0257,
+          0.0162
+        ],
+        "radius_norm": 0.0096,
+        "stroke_area_px": 171
+      },
+      {
+        "bbox_center_norm": [
+          0.5363,
+          0.5516
+        ],
+        "bbox_norm": [
+          0.4924,
+          0.5177,
+          0.0878,
+          0.0678
+        ],
+        "radius_norm": 0.0339,
+        "stroke_area_px": 954
+      },
+      {
+        "bbox_center_norm": [
+          0.6322,
+          0.5526
+        ],
+        "bbox_norm": [
+          0.6289,
+          0.547,
+          0.0068,
+          0.0111
+        ],
+        "radius_norm": 0.0056,
+        "stroke_area_px": 42
+      },
+      {
+        "bbox_center_norm": [
+          0.6025,
+          0.5572
+        ],
+        "bbox_norm": [
+          0.591,
+          0.546,
+          0.023,
+          0.0223
+        ],
+        "radius_norm": 0.0111,
+        "stroke_area_px": 150
+      },
+      {
+        "bbox_center_norm": [
+          0.6687,
+          0.6053
+        ],
+        "bbox_norm": [
+          0.664,
+          0.5967,
+          0.0095,
+          0.0172
+        ],
+        "radius_norm": 0.0086,
+        "stroke_area_px": 51
+      },
+      {
+        "bbox_center_norm": [
+          0.7045,
+          0.6103
+        ],
+        "bbox_norm": [
+          0.687,
+          0.5886,
+          0.0351,
+          0.0435
+        ],
+        "radius_norm": 0.0218,
+        "stroke_area_px": 170
+      },
+      {
+        "bbox_center_norm": [
+          0.6187,
+          0.621
+        ],
+        "bbox_norm": [
+          0.6032,
+          0.5997,
+          0.0311,
+          0.0425
+        ],
+        "radius_norm": 0.0213,
+        "stroke_area_px": 195
+      },
+      {
+        "bbox_center_norm": [
+          0.5532,
+          0.6296
+        ],
+        "bbox_norm": [
+          0.5046,
+          0.6048,
+          0.0973,
+          0.0496
+        ],
+        "radius_norm": 0.0365,
+        "stroke_area_px": 446
+      }
+    ]
+  },
+  "upper_occlusal5_test0": {
+    "source": "5_up_test0.png",
+    "orig_size": [
+      2160,
+      2880
+    ],
+    "crop_rect_in_orig": [
+      40.8,
+      144.0,
+      2095.2,
+      2659.2
+    ],
+    "match_score": 0.971,
+    "marks": [
+      {
+        "bbox_center_norm": [
+          0.7302,
+          0.2591
+        ],
+        "bbox_norm": [
+          0.6957,
+          0.2474,
+          0.0689,
+          0.0233
+        ],
+        "radius_norm": 0.0258,
+        "stroke_area_px": 273
+      },
+      {
+        "bbox_center_norm": [
+          0.8193,
+          0.3102
+        ],
+        "bbox_norm": [
+          0.8011,
+          0.298,
+          0.0365,
+          0.0243
+        ],
+        "radius_norm": 0.0137,
+        "stroke_area_px": 144
+      },
+      {
+        "bbox_center_norm": [
+          0.2891,
+          0.3112
+        ],
+        "bbox_norm": [
+          0.2715,
+          0.294,
+          0.0351,
+          0.0344
+        ],
+        "radius_norm": 0.0172,
+        "stroke_area_px": 145
+      },
+      {
+        "bbox_center_norm": [
+          0.2242,
+          0.378
+        ],
+        "bbox_norm": [
+          0.1972,
+          0.3558,
+          0.054,
+          0.0445
+        ],
+        "radius_norm": 0.0223,
+        "stroke_area_px": 170
+      },
+      {
+        "bbox_center_norm": [
+          0.7883,
+          0.3892
+        ],
+        "bbox_norm": [
+          0.7727,
+          0.3871,
+          0.0311,
+          0.004
+        ],
+        "radius_norm": 0.0117,
+        "stroke_area_px": 62
+      },
+      {
+        "bbox_center_norm": [
+          0.2553,
+          0.4332
+        ],
+        "bbox_norm": [
+          0.2094,
+          0.4236,
+          0.0919,
+          0.0192
+        ],
+        "radius_norm": 0.0344,
+        "stroke_area_px": 376
+      },
+      {
+        "bbox_center_norm": [
+          0.3006,
+          0.5233
+        ],
+        "bbox_norm": [
+          0.2837,
+          0.5056,
+          0.0338,
+          0.0354
+        ],
+        "radius_norm": 0.0177,
+        "stroke_area_px": 193
       }
     ]
   }

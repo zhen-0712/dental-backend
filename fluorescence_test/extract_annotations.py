@@ -42,6 +42,7 @@ DEFAULT_ORIG_DIRS = [HERE.parent / "real_color_translet", HERE.parent / "real_te
 STROKE_S_MIN = 180        # 再低到 160 皮膚就開始溢入（連通域面積 1.4k → 9.6k）
 STROKE_RG_DIFF = 90
 RED_H_LO, RED_H_HI = 10, 170
+DIFF_A_MIN = 12        # 標註圖的 Lab a* 需比原圖高出多少才算「畫上去的」
 
 VIEW_ABBR = {"front": "front", "left": "left_side", "right": "right_side",
              "up": "upper_occlusal", "low": "lower_occlusal"}
@@ -61,7 +62,11 @@ def match_original(stem: str, orig_dirs):
         n, abbr, suffix = m.group(1), m.group(2).lower(), m.group(3).lower()
         if abbr not in VIEW_ABBR:
             return None
-        cands = [f"{VIEW_ABBR[abbr]}{n}_{suffix}.jpg"]
+        # 標註檔名的 suffix 未必與原圖完全一致（例如標註是 test0、原圖是 test），
+        # 因此把結尾數字剝掉當作備選
+        base = suffix.rstrip("0123456789") or suffix
+        cands = [f"{VIEW_ABBR[abbr]}{n}_{suffix}.jpg",
+                 f"{VIEW_ABBR[abbr]}{n}_{base}.jpg"]
     for d in orig_dirs:
         for c in cands:
             if (d / c).exists():
@@ -151,6 +156,34 @@ def locate_in_original(crop_bgr, stroke_mask, orig_bgr, work=1200):
 
 
 # ==================================================================
+# 供外部重用：取得原圖座標系的筆畫遮罩
+# ==================================================================
+def stroke_mask_in_original(annot_png, orig_bgr, s_min=None, rg_diff=None):
+    """回傳與原圖同尺寸的筆畫遮罩，以及裁切矩形與比對分數。"""
+    ann = cv2.imread(str(annot_png))
+    x, y, w, h = find_photo_region(ann)
+    crop = ann[y:y + h, x:x + w]
+    mask = red_stroke_mask(crop, s_min, rg_diff)
+    (rx, ry, rw, rh), score = locate_in_original(crop, mask, orig_bgr)
+    ref = cv2.resize(orig_bgr[int(ry):int(ry + rh), int(rx):int(rx + rw)],
+                     (crop.shape[1], crop.shape[0]))
+    if ref.size:
+        k = (5, 5)
+        a1 = cv2.cvtColor(cv2.blur(crop, k), cv2.COLOR_BGR2LAB)[..., 1].astype(np.int16)
+        a0 = cv2.cvtColor(cv2.blur(ref, k), cv2.COLOR_BGR2LAB)[..., 1].astype(np.int16)
+        dm = (mask > 0) & ((a1 - a0) >= DIFF_A_MIN)
+        if dm.sum() >= 50:
+            mask = cv2.morphologyEx(dm.astype(np.uint8) * 255, cv2.MORPH_CLOSE,
+                                    np.ones((5, 5), np.uint8))
+    OH, OW = orig_bgr.shape[:2]
+    out = np.zeros((OH, OW), np.uint8)
+    small = cv2.resize(mask, (int(rw), int(rh)), interpolation=cv2.INTER_NEAREST)
+    x0, y0 = int(rx), int(ry)
+    out[y0:y0 + small.shape[0], x0:x0 + small.shape[1]] = small[:OH - y0, :OW - x0]
+    return out, (rx, ry, rw, rh), score
+
+
+# ==================================================================
 # 主流程
 # ==================================================================
 def process(path: Path, min_area: int, annot_dir, orig_dirs, s_min, rg_diff):
@@ -173,6 +206,22 @@ def process(path: Path, min_area: int, annot_dir, orig_dirs, s_min, rg_diff):
 
     # 3) 定位回原圖
     (rx, ry, rw, rh), score = locate_in_original(crop, mask, orig)
+
+    # 3b) 用「與原圖的差分」重新求筆畫。
+    # 純色彩判準在部分照片會失效——例如張口咬合面照的舌頭本身就是高飽和洋紅，
+    # 飽和度、R-max(G,B)、填充率、亮度全都與紅筆重疊（實測）。
+    # 但筆畫是「畫上去的東西」，原圖沒有；舌頭在兩張圖裡都一樣，相減即消失。
+    ref = cv2.resize(orig[int(ry):int(ry + rh), int(rx):int(rx + rw)],
+                     (crop.shape[1], crop.shape[0]))
+    if ref.size:
+        k = (5, 5)
+        a_ann = cv2.cvtColor(cv2.blur(crop, k), cv2.COLOR_BGR2LAB)[..., 1].astype(np.int16)
+        a_ref = cv2.cvtColor(cv2.blur(ref, k), cv2.COLOR_BGR2LAB)[..., 1].astype(np.int16)
+        added_red = (a_ann - a_ref) >= DIFF_A_MIN          # 標註圖比原圖「更紅」的地方
+        diff_mask = (mask > 0) & added_red
+        if diff_mask.sum() >= 50:                          # 差分有效才採用
+            mask = diff_mask.astype(np.uint8) * 255
+            mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
     sx, sy = rw / crop.shape[1], rh / crop.shape[0]
     flag = "" if score >= 0.55 else f"  ⚠️ 比對分數偏低 {score:.2f}，請務必檢查驗證圖"
 
