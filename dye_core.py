@@ -32,6 +32,13 @@ dye_core.py
    但肉眼看得到——因為人眼是「跟周圍比較」。局部背景相減正是模擬這件事。
    絕對門檻實測會先砍掉真正的染色區、只留下更紅的牙齦，方向相反。
 
+4. 送進 SAT 之前先壓制異常紅（`desat_soft`），只給 YOLO/SAM 看。
+   實測 SAT 會把染劑染得過紅的牙齒誤判成不是牙齒而整顆排除出 ROI——
+   用 b2 front 一個已知漏檢縫隙驗證，縫隙內原始 a\* 值（167~169）比兩側
+   被 SAT 框進 ROI 的牙齒還紅（154~166），證實那不是顏色判斷失敗，是
+   SAT 輸入端的幾何排除。只壓 a\* 超過門檻的異常值、正常範圍不動，三批
+   驗證命中率沒有退步、精確度全面提升（b2 18%→29%）。
+
 實測（5 張真實牙齒染色劑照片、23 個標註區域）：
    偵測佔 ROI  28~46% → 7.6%    圈外誤標 14.6% → 5.6%    區域命中 42% → 52%
 """
@@ -58,6 +65,16 @@ DEFAULT_CONFIG = {
     # 降到 0.05 可得 23 顆，標註被 ROI 涵蓋的比例從 12% 提升到 28%。
     # 僅影響染色劑模式；extract_plaque_regions.py 的下游 ROI 過濾不受影響。
     "sat_conf": 0.20,
+
+    # 送進 SAT 前壓制的 a* 異常紅門檻／強度。實測 SAT 會把染劑染得過紅的
+    # 牙齒誤判成不是牙齒而整顆排除出 ROI——用像素數值驗證過，被排除的
+    # 縫隙原始 a* 值（167~169）比周邊被框進 ROI 的牙齒還紅（154~166），
+    # 證實是幾何排除、不是顏色判斷失敗。只壓超過門檻的異常值，門檻以下
+    # 的正常牙齒/牙齦對比不動，三批驗證命中率沒有退步、精確度全面提升
+    # （b2 18%→29%）。只影響 SAT 的輸入，dye_core.detect() 判斷菌斑
+    # 顏色時仍讀取原圖。
+    "sat_desat_thresh": 145,
+    "sat_desat_k": 0.3,
 }
 
 UPPER_FDI = [11, 12, 13, 14, 15, 16, 17, 21, 22, 23, 24, 25, 26, 27, 18, 28]
@@ -80,6 +97,21 @@ def pad_to_square(img, target=512):
     ph, pw = target - nh, target - nw
     return cv2.copyMakeBorder(r, ph // 2, ph - ph // 2, pw // 2, pw - pw // 2,
                               cv2.BORDER_CONSTANT, value=[128, 128, 128])
+
+
+def desat_soft(img, thresh=None, k=None):
+    """只壓縮 Lab a* 通道裡超過 thresh 的異常紅（往 thresh 方向拉近），
+    thresh 以下的正常牙齒/牙齦對比完全不動。只給 SAT 的 YOLO+SAM 看，
+    dye_core.detect() 判斷菌斑顏色時仍讀取原圖，兩條路徑分開。"""
+    if thresh is None:
+        thresh = DEFAULT_CONFIG["sat_desat_thresh"]
+    if k is None:
+        k = DEFAULT_CONFIG["sat_desat_k"]
+    lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB).astype(np.float32)
+    a = lab[..., 1]
+    excess = np.clip(a - thresh, 0, None)
+    lab[..., 1] = a - excess * (1 - k)
+    return cv2.cvtColor(np.clip(lab, 0, 255).astype(np.uint8), cv2.COLOR_LAB2BGR)
 
 
 def load_models(weight_dir):
